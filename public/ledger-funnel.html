@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Funnel map Â· Ledger lens</title>
+<style>
+:root{
+  --paper:#fff; --panel:#fafafa; --sunk:#f2f2f2;
+  --line:#e8e8e8; --line-strong:#d4d4d4;
+  --ink:#141414; --ink-2:#5a5a5a; --ink-3:#8c8c8c; --ink-4:#b6b6b6;
+  --sans:'Inter','Helvetica Neue',-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  --good:#0ca30c; --good-bg:#e9f7e9;
+  --warning:#fab219; --warning-bg:#fff6dd;
+  --serious:#ec835a; --serious-bg:#fdefe8;
+  --critical:#d03b3b; --critical-bg:#fbeaea;
+  --info:#2f6feb; --info-bg:#eaf1fe;
+  --col:112px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--sunk);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font-family:inherit}
+
+.bar{height:48px;border-bottom:1px solid var(--line);background:var(--paper);display:flex;align-items:center;padding:0 18px;gap:9px}
+.bar .dot{width:8px;height:8px;border-radius:50%;background:var(--line-strong)}
+.bar .t{font-size:13px;font-weight:600}
+.bar .s{font-size:13px;color:var(--ink-3)}
+.sp{flex:1}
+.xs{font-size:11px}.faint{color:var(--ink-4)}
+
+.mk{display:inline-block;width:8px;height:8px;border-radius:50%;flex:0 0 8px}
+.mk.good{background:var(--good)} .mk.warning{background:var(--warning)} .mk.serious{background:var(--serious)} .mk.critical{background:var(--critical)} .mk.info{background:var(--info)}
+.mk.sq{border-radius:2px}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;padding:2px 8px 2px 6px;border-radius:20px;color:var(--ink);white-space:nowrap}
+.pill.good{background:var(--good-bg)} .pill.warning{background:var(--warning-bg)} .pill.serious{background:var(--serious-bg)} .pill.critical{background:var(--critical-bg)} .pill.info{background:var(--info-bg)}
+.tag{display:inline-block;font-size:10px;padding:1px 6px;border-radius:4px;background:var(--sunk);color:var(--ink-2);font-weight:500}
+
+.btn{font-size:13px;font-weight:500;height:32px;padding:0 13px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink);text-decoration:none;transition:.14s}
+.btn:hover{background:var(--sunk);border-color:var(--ink-3)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn:focus-visible,.node:focus-visible,.lens button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+.wrap{position:fixed;top:48px;left:0;right:0;bottom:0;display:flex}
+.canvas{flex:1;min-width:0;overflow:auto;position:relative;background:
+  radial-gradient(circle,#dcdcdc 1px,transparent 1.2px) 0 0/18px 18px,var(--panel)}
+.board{padding:32px 24px 120px;min-width:max-content}
+
+.summaryline{display:flex;align-items:center;gap:12px;margin-bottom:18px;font-size:12.5px;color:var(--ink-2)}
+.summaryline b{color:var(--ink)}
+
+/* nodes */
+.row{display:grid;grid-template-columns:repeat(var(--n),var(--col));column-gap:0;position:relative}
+.cell{display:flex;justify-content:center;position:relative}
+.cell + .cell::before{content:'';position:absolute;left:-6px;top:84px;width:12px;border-top:1.5px solid var(--line-strong)}
+.cell + .cell::after{content:'';position:absolute;left:4px;top:80px;border-left:5px solid var(--line-strong);border-top:4px solid transparent;border-bottom:4px solid transparent}
+.node{width:98px;background:var(--paper);border:1px solid var(--line-strong);border-radius:12px;padding:8px;cursor:pointer;text-align:left;transition:.14s;position:relative}
+.node:hover{border-color:var(--ink-3)}
+.node[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 2px var(--ink)}
+.node .num{font-family:var(--mono);font-size:9.5px;color:var(--ink-4)}
+.node .nm{font-size:12px;font-weight:600;line-height:1.25;margin-top:1px;min-height:30px}
+.thumb{height:58px;border-radius:7px;background:var(--sunk);margin:6px 0;padding:7px 8px;display:flex;flex-direction:column;gap:4px}
+.thumb i{display:block;height:4px;border-radius:2px;background:var(--line-strong)}
+.thumb i.b{margin-top:auto;height:8px;background:var(--ink-4)}
+.node .ask{font-size:10.5px;color:var(--ink-3);line-height:1.35;min-height:28px}
+.node .badge{position:absolute;top:-9px;right:-9px;min-width:26px;height:20px;padding:0 6px;border-radius:10px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;color:#fff;border:2px solid var(--panel)}
+.node .badge.neg{background:var(--critical)} .node .badge.pos{background:var(--good)}
+.lens-off .node .badge{display:none}
+
+/* conversion lens stub */
+.conv{margin-top:14px}
+.conv .bar2{height:6px;border-radius:3px;background:var(--line-strong);margin:0 17px}
+
+/* ledger lane */
+.lane{margin-top:22px;border-top:1px dashed var(--line-strong);padding-top:12px}
+.lane-h{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-4)}
+.lane svg{display:block}
+.lane-k{display:flex;gap:14px;font-size:11px;color:var(--ink-3);margin-top:6px}
+.lane-k .sw{display:inline-block;width:11px;height:8px;border-radius:2px;margin-right:5px;vertical-align:0}
+.lens-off .lane{display:none}
+
+/* dock */
+.dock{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);display:flex;align-items:center;gap:4px;background:var(--paper);border:1px solid var(--line-strong);border-radius:999px;padding:5px;box-shadow:0 6px 18px rgba(0,0,0,.08)}
+.dock .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-4);padding:0 8px 0 10px}
+.lens{display:flex;gap:2px}
+.lens button{border:0;background:transparent;font-size:12.5px;padding:6px 12px;border-radius:999px;cursor:pointer;color:var(--ink-2);display:inline-flex;align-items:center;gap:6px}
+.lens button[aria-pressed="true"]{background:var(--ink);color:#fff}
+
+/* studio readout */
+.side{width:380px;flex:0 0 380px;background:var(--paper);border-left:1px solid var(--line-strong);overflow-y:auto;box-shadow:-12px 0 32px rgba(0,0,0,.05)}
+.side-h{padding:16px 20px 12px;border-bottom:1px solid var(--line)}
+.side-h .k{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-4)}
+.side-h h2{font-size:15px;font-weight:600;margin:3px 0 0;letter-spacing:-.01em}
+.side-h .sub{font-size:12px;color:var(--ink-3)}
+.sb{padding:16px 20px 24px}
+
+.phone{width:180px;margin:0 auto 16px;border:1px solid var(--line-strong);border-radius:22px;padding:10px;background:var(--paper);position:relative}
+.phone .scr{border-radius:14px;background:var(--sunk);height:250px;padding:16px 12px;display:flex;flex-direction:column;gap:7px}
+.phone .scr i{display:block;height:6px;border-radius:3px;background:var(--line-strong)}
+.phone .scr .askbox{margin-top:10px;border:1px dashed var(--ink-3);border-radius:8px;padding:8px;font-size:10.5px;color:var(--ink-2);line-height:1.35;background:var(--paper)}
+.phone .scr .cta{margin-top:auto;height:26px;border-radius:7px;background:var(--ink)}
+.chipL{position:absolute;top:-10px;left:50%;transform:translateX(-50%);display:inline-flex;align-items:center;gap:6px;background:var(--paper);border:1px solid var(--line-strong);border-radius:999px;padding:3px 10px 3px 8px;font-size:11px;font-weight:600;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.06)}
+.cap{font-size:11px;color:var(--ink-4);text-align:center;margin:-6px 0 16px}
+
+.flow3{display:grid;grid-template-columns:1fr 18px 1fr 18px 1fr;align-items:center;gap:4px;border:1px solid var(--line);border-radius:12px;padding:12px 10px;margin-bottom:14px;text-align:center}
+.flow3 .n{font-size:20px;font-weight:600;letter-spacing:-.02em;display:flex;align-items:center;justify-content:center;gap:6px}
+.flow3 .l{font-size:10.5px;color:var(--ink-4)}
+.flow3 .ar{color:var(--ink-4);font-size:13px}
+
+.carry{border-radius:10px;padding:11px 13px;font-size:12.5px;color:var(--ink-2);line-height:1.5;margin-bottom:14px}
+.carry.critical{background:var(--critical-bg)} .carry.good{background:var(--good-bg)} .carry.warning{background:var(--warning-bg)}
+.carry b{color:var(--ink)}
+.carry ul{margin:6px 0 0;padding-left:16px}
+.carry li{margin:2px 0}
+
+.fh{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-4);margin:4px 0 8px}
+.fi{display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink-2);line-height:1.45}
+.fi .mk{margin-top:5px}
+.fi b{color:var(--ink);font-weight:600}
+.none{font-size:12.5px;color:var(--ink-3);padding:9px 0;border-top:1px solid var(--line)}
+.side .btn{margin-top:14px}
+.note{font-size:11.5px;color:var(--ink-4);margin-top:12px;line-height:1.5}
+
+@media (max-width:980px){
+  body{overflow:auto}
+  .wrap{position:static;display:block}
+  .side{width:auto;border-left:0;border-top:1px solid var(--line-strong);box-shadow:none}
+  .canvas{height:560px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <span class="dot"></span>
+  <span class="t">Funnel map</span>
+  <span class="s">Â· UnoBank Â· Onboarding</span>
+  <span class="sp"></span>
+  <span class="xs faint" id="barNote"></span>
+</div>
+
+<div class="wrap">
+  <div class="canvas" id="canvas">
+    <div class="board" id="board">
+      <div class="summaryline" id="sumline"></div>
+      <div class="row" id="nodes"></div>
+      <div class="lane" id="lane">
+        <div class="lane-h">Ledger Â· trust balance <span class="tag" style="text-transform:none;letter-spacing:0;font-weight:500">aligned to each step</span></div>
+        <div id="laneSvg"></div>
+        <div class="lane-k">
+          <span><span class="sw" style="background:var(--good-bg);box-shadow:inset 0 0 0 1px #bfe6bf"></span>Credit</span>
+          <span><span class="sw" style="background:var(--critical-bg);box-shadow:inset 0 0 0 1px #f0c4c4"></span>Debt</span>
+          <span>Bar = what the step asks, label = balance after it</span>
+        </div>
+      </div>
+    </div>
+    <div class="dock" role="group" aria-label="Lens">
+      <span class="lbl">Lens</span>
+      <div class="lens" id="lens">
+        <button data-lens="flow" aria-pressed="false">Flow</button>
+        <button data-lens="ledger" aria-pressed="true"><span class="mk good" style="width:6px;height:6px;flex-basis:6px"></span>Ledger</button>
+      </div>
+    </div>
+  </div>
+
+  <aside class="side" aria-label="Studio readout">
+    <div class="side-h">
+      <div class="k">Studio Â· this screen</div>
+      <h2 id="sName">â</h2>
+      <div class="sub" id="sScreen">â</div>
+    </div>
+    <div class="sb" id="sBody"></div>
+  </aside>
+</div>
+
+<script>
+/* =========================================================================
+   Funnel map Â· Ledger lens
+   The same balance Ledger computes, drawn under the funnel map so a team
+   reads it where they arrange the flow. The right panel is what Studio
+   shows for a single screen: arrives with, asks, leaves with, and which
+   earlier steps it inherits debt from. A screen on its own can't show
+   carried debt; that's why the lens lives on the funnel map first.
+
+   Reads the same values Ledger uses (Plana defaults or the team's recorded
+   values). Decisions are made in Ledger, not here.
+   ========================================================================= */
+
+const BASELINE = 2;
+const STEPS = [
+  {id:'s1', name:'Welcome', screen:'Studio / Onboarding / Welcome', give:3, giveL:'Free account, no monthly fee', ask:{type:'attention', label:'Read a three-screen intro', weight:1, reason:true, exit:true}},
+  {id:'s2', name:'Mobile number', screen:'Studio / Onboarding / Phone', give:0, ask:{type:'data', label:'Mobile number', weight:2, reason:false, exit:null}},
+  {id:'s3', name:'Notifications', screen:'Studio / Onboarding / Permission prompt', give:0, ask:{type:'permission', label:'Push notifications, OS prompt', weight:3, reason:false, exit:false}},
+  {id:'s4', name:'Identity', screen:'Studio / Onboarding / Identity step', give:1, giveL:'Progress shown: step 2 of 4', ask:{type:'data', label:'Passport scan and selfie', weight:5, reason:true, exit:null, proxy:true}},
+  {id:'s5', name:'Preferences', screen:'Studio / Onboarding / Preferences', give:0, ask:{type:'attention', label:'Marketing emails and offers', weight:2, reason:false, exit:false, defaultOn:true}},
+  {id:'s6', name:'Terms', screen:'Studio / Onboarding / Terms', give:0, ask:{type:'belief', label:'Accept Terms and Privacy, one checkbox', weight:3, reason:false, exit:null, bundled:true}},
+  {id:'s7', name:'Fund account', screen:'Studio / Onboarding / Top up', give:0, ask:{type:'money', label:'Top up Â£20 to activate', weight:4, reason:true, exit:null}},
+  {id:'s8', name:'Account home', screen:'Studio / Home / Account', give:6, giveL:'Card, account number, balance', ask:null},
+  {id:'s9', name:'Send money', screen:'Studio / Payments / Send', give:3, giveL:'Free instant transfers', ask:{type:'permission', label:'Contacts access', weight:3, reason:true, exit:true, proxy:true}}
+];
+
+function cost(a){
+  if (!a) return 0;
+  let w = a.weight;
+  if (a.reason) w -= 1;
+  if (a.exit === true) w -= 1;
+  if (a.defaultOn) w += 1;
+  if (a.bundled) w += 1;
+  return Math.max(1, w);
+}
+let credit = BASELINE;
+const RUN = STEPS.map(s => {
+  const before = credit + s.give, c = cost(s.ask);
+  credit = before - c;
+  return {id:s.id, arrive:credit + c - s.give, before, cost:c, after:credit};
+});
+
+/* the same rule checks Ledger runs, reduced to what a single screen needs */
+function issues(s, r){
+  const a = s.ask, out = [];
+  if (!a) return out;
+  if (r.cost > r.before) out.push({sev:'critical', label:'High', t:'<b>Sequencing.</b> Asks ' + r.cost + ' with ' + r.before + ' earned.'});
+  if (!a.reason && a.weight >= 2) out.push({sev:'serious', label:'Medium', t:'<b>Justification.</b> Nothing says why the product needs it.'});
+  if (a.exit === false) out.push({sev:'serious', label:'Medium', t:'<b>Off-switch.</b> No visible way to change it later.'});
+  if (a.defaultOn) out.push({sev:'serious', label:'Medium', t:'<b>Default state.</b> Opted in by default.'});
+  if (a.weight >= 3 && !a.proxy) out.push({sev:'warning', label:'Low', t:'<b>Measurability.</b> No signal would show hesitation here.'});
+  return out;
+}
+
+const $ = id => document.getElementById(id);
+const sign = n => (n > 0 ? '+' : '') + n;
+let sel = 's7', lens = 'ledger';
+
+function renderNodes(){
+  const n = STEPS.length;
+  $('nodes').style.setProperty('--n', n);
+  $('nodes').innerHTML = STEPS.map((s, i) => {
+    const r = RUN[i];
+    return '<div class="cell"><button class="node" data-node="' + s.id + '" aria-pressed="' + (sel === s.id) + '">'
+      + '<span class="badge ' + (r.after < 0 ? 'neg' : 'pos') + '">' + sign(r.after) + '</span>'
+      + '<div class="num">' + String(i + 1).padStart(2, '0') + '</div>'
+      + '<div class="nm">' + s.name + '</div>'
+      + '<div class="thumb"><i style="width:70%"></i><i style="width:90%"></i><i style="width:55%"></i><i class="b"></i></div>'
+      + '<div class="ask">' + (s.ask ? '<span class="tag">' + s.ask.type + '</span> ' + s.ask.label : '<span class="mk good sq" style="width:6px;height:6px"></span> Gives only') + '</div>'
+      + '</button></div>';
+  }).join('');
+}
+
+function renderLane(){
+  const colW = 112, n = STEPS.length, W = colW * n, H = 200, T = 12, B = 14;
+  const vals = RUN.flatMap(r => [r.before, r.after]);
+  const yMax = Math.max(...vals, 3) + 1, yMin = Math.min(...vals, -2) - 1;
+  const y = v => T + (yMax - v) / (yMax - yMin) * (H - T - B);
+  const x = i => i * colW + colW / 2;
+  let s = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Trust balance per step">';
+  s += '<rect x="0" y="' + T + '" width="' + W + '" height="' + (y(0) - T) + '" fill="#e9f7e9" opacity=".7"/>';
+  s += '<rect x="0" y="' + y(0) + '" width="' + W + '" height="' + (H - B - y(0)) + '" fill="#fbeaea" opacity=".85"/>';
+  s += '<line x1="0" x2="' + W + '" y1="' + y(0) + '" y2="' + y(0) + '" stroke="#141414"/>';
+  RUN.forEach((r, i) => {
+    if (sel === r.id) s += '<rect x="' + (i * colW + 8) + '" y="' + T + '" width="' + (colW - 16) + '" height="' + (H - T - B) + '" fill="#141414" opacity=".05" rx="6"/>';
+    /* the drop each ask causes, as a bar from before to after */
+    if (r.cost){
+      s += '<rect x="' + (x(i) - 5) + '" y="' + y(r.before) + '" width="10" height="' + (y(r.after) - y(r.before)) + '" rx="3" fill="#ec835a" opacity=".55"/>';
+    }
+  });
+  s += '<polyline fill="none" stroke="#141414" stroke-width="2" points="' + RUN.map((r, i) => x(i) + ',' + y(r.after)).join(' ') + '"/>';
+  RUN.forEach((r, i) => {
+    s += '<circle cx="' + x(i) + '" cy="' + y(r.after) + '" r="5" fill="' + (r.after < 0 ? '#d03b3b' : '#0ca30c') + '" stroke="#fff" stroke-width="2"/>';
+    s += '<text x="' + (x(i) + 9) + '" y="' + (y(r.after) + 4) + '" font-size="11" font-weight="600" fill="#141414">' + sign(r.after) + '</text>';
+  });
+  $('laneSvg').innerHTML = s + '</svg>';
+}
+
+function renderSide(){
+  const i = STEPS.findIndex(s => s.id === sel), s = STEPS[i], r = RUN[i];
+  const list = issues(s, r);
+  const neg = r.after < 0;
+  $('sName').textContent = s.name;
+  $('sScreen').textContent = s.screen;
+
+  /* where carried debt came from: earlier asks that took the balance down */
+  const contributors = RUN.slice(0, i).map((x, j) => ({s:STEPS[j], x, drain:x.cost - STEPS[j].give}))
+    .filter(o => o.drain > 0).sort((p, q) => q.drain - p.drain);
+  const arrive = i === 0 ? BASELINE : RUN[i - 1].after;
+  let carry;
+  if (arrive < 0){
+    carry = '<div class="carry critical"><b>Arrives already in debt (' + sign(arrive) + ').</b> Fixing this screen alone won\'t clear it. The balance was spent on:'
+      + '<ul>' + contributors.slice(0, 4).map(o => '<li>' + o.s.name + ' Â· net â' + o.drain + (o.s.give ? ' (gives ' + o.s.give + ', asks ' + o.x.cost + ')' : '') + '</li>').join('') + '</ul></div>';
+  } else if (!s.ask){
+    carry = '<div class="carry good"><b>This screen only gives.</b> It adds ' + s.give + ' to the balance. Asks placed after it land with more credit.</div>';
+  } else if (neg){
+    carry = '<div class="carry warning"><b>Arrives with credit, leaves in debt.</b> This is the screen where the balance tips. The ask outweighs what the user has received so far.</div>';
+  } else {
+    carry = '<div class="carry good"><b>Earned.</b> The user has received enough by this point to make this ask.</div>';
+  }
+
+  $('sBody').innerHTML =
+      '<div class="phone"><span class="chipL"><span class="mk ' + (neg ? 'critical' : 'good') + '"></span>Ledger ' + sign(r.after) + (list.length ? ' Â· ' + list.length + ' open' : '') + '</span>'
+    + '<div class="scr"><i style="width:60%;height:9px;background:#c9c9c9"></i><i style="width:90%"></i><i style="width:75%"></i>'
+    + (s.ask ? '<div class="askbox">' + s.ask.label + '</div>' : '<div class="askbox" style="border-style:solid;border-color:#bfe6bf">' + (s.giveL || 'Value delivered') + '</div>')
+    + '<div class="cta"></div></div></div>'
+    + '<div class="cap">The chip Studio shows on the canvas. Click opens this readout.</div>'
+    + '<div class="flow3">'
+    +   '<div><div class="n"><span class="mk ' + (arrive < 0 ? 'critical' : 'good') + '"></span>' + sign(arrive) + '</div><div class="l">Arrives with</div></div><span class="ar">â</span>'
+    +   '<div><div class="n">' + (s.give ? '+' + s.give : '0') + (r.cost ? ' / â' + r.cost : '') + '</div><div class="l">Gives / asks</div></div><span class="ar">â</span>'
+    +   '<div><div class="n"><span class="mk ' + (neg ? 'critical' : 'good') + '"></span>' + sign(r.after) + '</div><div class="l">Leaves with</div></div>'
+    + '</div>'
+    + carry
+    + '<div class="fh">Findings on this screen Â· ' + list.length + '</div>'
+    + (list.length ? list.map(f => '<div class="fi"><span class="mk ' + f.sev + '"></span><div>' + f.t + ' <span class="pill ' + f.sev + '">' + f.label + '</span></div></div>').join('')
+                   : '<div class="none">Nothing open on this screen.</div>')
+    + '<a class="btn primary" href="ledger.html">Decide in Ledger</a>'
+    + '<div class="note">Rule checks only. AI findings and decisions live in Ledger; this readout reflects them once recorded.</div>';
+}
+
+function render(){
+  $('board').classList.toggle('lens-off', lens !== 'ledger');
+  document.querySelectorAll('[data-lens]').forEach(b => b.setAttribute('aria-pressed', b.dataset.lens === lens));
+  const debt = RUN.filter(r => r.after < 0).length;
+  const low = RUN.reduce((m, r) => r.after < m.after ? r : m, RUN[0]);
+  const lowS = STEPS.find(s => s.id === low.id);
+  const tip = RUN.find(r => r.after < 0);
+  $('sumline').innerHTML = lens === 'ledger'
+    ? '<span class="pill critical"><span class="mk critical"></span>Overdrawn</span><span><b>' + debt + ' of ' + STEPS.length + '</b> steps in debt Â· lowest point <b>' + sign(low.after) + '</b> at ' + lowS.name + ' Â· tips into debt at <b>' + STEPS.find(s => s.id === tip.id).name + '</b></span>'
+    : '<span>' + STEPS.length + ' steps Â· ' + STEPS.filter(s => s.ask).length + ' asks</span>';
+  $('barNote').textContent = 'Values: Plana defaults Â· baseline ' + BASELINE + ' from Anchor Â§2';
+  renderNodes(); renderLane(); renderSide();
+}
+
+document.addEventListener('click', e => {
+  const n = e.target.closest('[data-node]');
+  if (n){ sel = n.dataset.node; render(); return; }
+  const l = e.target.closest('[data-lens]');
+  if (l){ lens = l.dataset.lens; render(); }
+});
+
+render();
+</script>
+</body>
+</html>
+Folder info
+2 items
+96 KB
+October 20, 2026
+Did you know?
+You can view over 200 file formats online. Click any file in this folder to view it.
+

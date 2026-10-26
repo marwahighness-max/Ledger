@@ -1,0 +1,1251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledger</title>
+<style>
+:root{
+  --paper:#fff; --panel:#fafafa; --sunk:#f2f2f2;
+  --line:#e8e8e8; --line-strong:#d4d4d4;
+  --ink:#141414; --ink-2:#5a5a5a; --ink-3:#8c8c8c; --ink-4:#b6b6b6;
+  --sans:'Inter','Helvetica Neue',-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+
+  /* status: good / warning / serious / critical. Always paired with an icon + label. */
+  --good:#0ca30c;     --good-bg:#e9f7e9;
+  --warning:#fab219;  --warning-bg:#fff6dd;
+  --serious:#ec835a;  --serious-bg:#fdefe8;
+  --critical:#d03b3b; --critical-bg:#fbeaea;
+  /* information: AI scan, model findings, changes */
+  --info:#2f6feb;     --info-bg:#eaf1fe;
+
+  --panel-w:560px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--sunk);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font-family:inherit}
+
+/* ---------- bar ---------- */
+.bar{height:48px;border-bottom:1px solid var(--line);background:var(--paper);display:flex;align-items:center;padding:0 18px;gap:9px;position:relative;z-index:2}
+.bar .dot{width:8px;height:8px;border-radius:50%;background:var(--line-strong)}
+.bar .t{font-size:13px;font-weight:600}
+.bar .s{font-size:13px;color:var(--ink-3)}
+.sp{flex:1}
+.preview{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ink-4)}
+.preview select{font-family:inherit;font-size:12px;height:28px;border:1px dashed var(--line-strong);border-radius:7px;padding:0 8px;background:var(--panel);color:var(--ink-2)}
+
+h2{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-4);margin:24px 0 10px}
+.xs{font-size:11px}.faint{color:var(--ink-4)}.dimmer{color:var(--ink-3)}.dim{color:var(--ink-2)}
+.hidden{display:none!important}
+
+/* status marks: colored shape + ink label */
+.mk{display:inline-block;width:8px;height:8px;border-radius:50%;flex:0 0 8px}
+.mk.good{background:var(--good)} .mk.warning{background:var(--warning)} .mk.serious{background:var(--serious)} .mk.critical{background:var(--critical)} .mk.info{background:var(--info)}
+.mk.sq{border-radius:2px} .mk.tri{width:0;height:0;border-radius:0;background:none;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid var(--critical)}
+
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;padding:2px 8px 2px 6px;border-radius:20px;color:var(--ink);white-space:nowrap}
+.pill.good{background:var(--good-bg)} .pill.warning{background:var(--warning-bg)} .pill.serious{background:var(--serious-bg)} .pill.critical{background:var(--critical-bg)} .pill.info{background:var(--info-bg)} .pill.neutral{background:var(--sunk);color:var(--ink-2)}
+
+.btn{font-size:13px;font-weight:500;height:34px;padding:0 14px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink);transition:.14s}
+.btn:hover:not(:disabled){background:var(--sunk);border-color:var(--ink-3)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn.primary:hover:not(:disabled){background:#000}
+.btn.info{background:var(--info);border-color:var(--info);color:#fff}
+.btn.info:hover:not(:disabled){background:#2559c4;border-color:#2559c4}
+.btn.tiny{height:26px;font-size:12px;padding:0 10px}
+.btn.lg{height:40px;padding:0 18px;font-size:13.5px}
+.btn:disabled{opacity:.35;cursor:default}
+.btn:focus-visible,.chip:focus-visible,.step:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+/* ---------- empty / ready / reading ---------- */
+.onboard{position:fixed;top:48px;left:0;right:0;bottom:0;overflow-y:auto;background:var(--paper);display:flex;align-items:center;justify-content:center;padding:32px 20px}
+.ob{width:100%;max-width:880px;display:grid;grid-template-columns:1fr 340px;gap:48px;align-items:center}
+.ob h1{font-size:30px;line-height:1.15;letter-spacing:-.025em;font-weight:600;margin:0 0 14px;max-width:440px}
+.ob .lede{font-size:14.5px;color:var(--ink-2);margin:0 0 26px;max-width:470px}
+.how{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:28px}
+.how div{border-top:1px solid var(--ink);padding-top:9px;font-size:12.5px;color:var(--ink-2);line-height:1.45}
+.how b{display:block;font-family:var(--mono);font-size:10px;color:var(--ink-4);font-weight:500;margin-bottom:4px}
+.how strong{display:block;color:var(--ink);font-size:13px;margin-bottom:2px}
+.ready{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:22px;max-width:470px}
+.ready .r{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);font-size:13px}
+.ready .r:last-child{border-bottom:0}
+.ready .r .k{flex:1}
+.ready .r .v{font-size:12px;color:var(--ink-3)}
+.cta{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.cta-note{font-size:11.5px;color:var(--ink-4);margin-top:10px}
+.ob-art svg{display:block;width:100%;height:auto}
+.spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--line-strong);border-top-color:var(--info);animation:sp .8s linear infinite;flex:0 0 12px}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ---------- live layout ---------- */
+.main{position:fixed;top:48px;left:0;right:0;bottom:0;display:flex}
+.left{flex:1;min-width:0;overflow-y:auto;padding:20px 22px 28px;background:var(--paper)}
+.right{width:var(--panel-w);flex:0 0 var(--panel-w);border-left:1px solid var(--line-strong);background:var(--paper);display:flex;flex-direction:column;box-shadow:-12px 0 32px rgba(0,0,0,.05)}
+
+.banner{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:10px;margin-bottom:14px;font-size:12.5px;color:var(--ink-2);line-height:1.5}
+.banner b{color:var(--ink)}
+.banner.info{background:var(--info-bg)} .banner.serious{background:var(--serious-bg)}
+.banner .mk{margin-top:5px}
+.banner .btn{margin-top:8px}
+
+/* summary: gauge + breakdown */
+.summary{display:grid;grid-template-columns:250px 1fr;gap:12px}
+.gcard,.bcard{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--paper)}
+.gcard{text-align:center}
+.gcard svg{display:block;width:100%;max-width:220px;height:auto;margin:0 auto}
+.zone{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;margin-top:2px}
+.zdesc{font-size:11.5px;color:var(--ink-3);margin-top:3px;line-height:1.45}
+.gflag{font-size:10.5px;color:var(--ink-3);margin-top:7px}
+.brow{display:grid;grid-template-columns:110px 1fr 44px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)}
+.brow:last-of-type{border-bottom:0}
+.brow .l{font-size:12.5px;font-weight:600}
+.brow .l small{display:block;font-size:10.5px;font-weight:400;color:var(--ink-4)}
+.track{height:8px;border-radius:4px;background:var(--sunk);overflow:hidden;position:relative}
+.track i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;transition:width .4s}
+.brow .v{font-size:12.5px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.stats .n{font-size:19px;font-weight:600;letter-spacing:-.02em;line-height:1.1;display:flex;align-items:center;gap:6px}
+.stats .l{font-size:10.5px;color:var(--ink-4);margin-top:2px}
+details.how-score{margin-top:10px;font-size:11.5px;color:var(--ink-3)}
+details.how-score summary{cursor:pointer;color:var(--ink-2)}
+details.how-score p{margin:6px 0 0;line-height:1.5}
+
+/* sources */
+.srcbar{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.srcbar .fn{font-size:12px;font-weight:600}
+.srcbar .st{font-size:10.5px;color:var(--ink-4);margin-top:1px}
+.srcs{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px}
+.src{font-size:11px;padding:2px 7px;border-radius:4px;transition:.2s;display:inline-flex;align-items:center;gap:5px}
+.src.rule{background:var(--sunk);color:var(--ink)}
+.src.wait{background:transparent;color:var(--ink-4);box-shadow:inset 0 0 0 1px var(--line)}
+.src.ai{background:var(--info-bg);color:var(--ink)}
+.src .mk{width:6px;height:6px;flex-basis:6px}
+
+/* chart */
+.chart{border:1px solid var(--line);border-radius:12px;padding:12px 12px 6px;background:var(--paper);position:relative}
+.chart svg{display:block;width:100%;height:auto}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--ink-3);padding:4px 4px 6px;align-items:center}
+.legend i{display:inline-block;width:18px;height:0;border-top:2px solid var(--ink);vertical-align:middle;margin-right:6px}
+.legend i.dash{border-top:2px dashed var(--ink-4)}
+.legend .sw{display:inline-block;width:12px;height:9px;border-radius:2px;vertical-align:-1px;margin-right:6px}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:#fff;font-size:11.5px;line-height:1.45;padding:7px 9px;border-radius:7px;max-width:220px;opacity:0;transition:opacity .1s;z-index:3}
+.tip b{font-weight:600}
+
+/* steps */
+.steps{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.step{display:grid;grid-template-columns:26px 1fr 70px 64px;gap:12px;align-items:center;padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer;background:var(--paper);transition:.12s;position:relative}
+.step:last-child{border-bottom:0}
+.step:hover{background:var(--panel)}
+.step[aria-pressed="true"]{background:var(--panel);box-shadow:inset 3px 0 0 var(--ink)}
+.step .n{font-family:var(--mono);font-size:11px;color:var(--ink-4)}
+.step .nm{font-size:13px;font-weight:600;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.step .ex{font-size:11.5px;color:var(--ink-3);margin-top:3px;line-height:1.55}
+.step .ex b{font-weight:600;color:var(--ink-2)}
+.gv{display:inline-flex;align-items:center;gap:4px}
+.bal{text-align:right}
+.bal .num{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;display:inline-flex;align-items:center;gap:5px}
+.bal small{display:block;font-size:9.5px;font-weight:500;color:var(--ink-4);text-transform:uppercase;letter-spacing:.08em}
+.cnt{text-align:right}
+.pip{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--line-strong);margin-left:2px}
+.pip.on{background:var(--ink)}
+.tag{display:inline-block;font-size:10px;padding:1px 6px;border-radius:4px;background:var(--sunk);color:var(--ink-2);font-weight:500}
+.tag.ghost{background:transparent;box-shadow:inset 0 0 0 1px var(--line-strong)}
+.tag.new{background:var(--info-bg);color:var(--ink)}
+
+.h2row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:24px 0 10px}
+.h2row h2{margin:0}
+.draftbar{position:sticky;top:-20px;z-index:4;margin:-20px -22px 14px;padding:12px 22px;background:var(--info-bg);border-bottom:1px solid #d4e2fc;display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.draftbar .dt{flex:1;min-width:240px;font-size:12.5px;color:var(--ink-2);line-height:1.5}
+.draftbar .dt b{color:var(--ink)}
+.draftbar textarea{min-height:44px;margin:8px 0 0;background:#fff}
+.draftbar .btnrow{align-self:flex-end}
+.stepper{display:inline-flex;align-items:center;border:1px solid var(--line-strong);border-radius:7px;overflow:hidden;background:var(--paper);vertical-align:middle}
+.stepper button{width:24px;height:24px;border:0;background:var(--paper);cursor:pointer;font-size:14px;color:var(--ink-2);line-height:1}
+.stepper button:hover:not(:disabled){background:var(--sunk);color:var(--ink)}
+.stepper button:disabled{opacity:.3;cursor:default}
+.stepper span{min-width:22px;text-align:center;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.stepper.chg{border-color:var(--info);box-shadow:0 0 0 2px var(--info-bg)}
+.edrow{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:11.5px;color:var(--ink-3)}
+.edrow label{display:inline-flex;align-items:center;gap:7px}
+.basebox{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:11px 14px;border:1px solid var(--line);border-radius:12px;margin-bottom:10px;background:var(--panel);font-size:12.5px}
+.basebox .k{font-weight:600}
+.basebox .hint{font-size:11.5px;color:var(--ink-3);flex:1;min-width:200px}
+.vlog{margin-top:10px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.vlog .vh{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-4);padding:9px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+.vlog .vi{padding:10px 14px;border-bottom:1px solid var(--line);font-size:12px;color:var(--ink-2);line-height:1.5}
+.vlog .vi:last-child{border-bottom:0}
+.vlog .vi b{color:var(--ink)}
+.vlog .vi .meta{font-size:11px;color:var(--ink-4)}
+.tag.team{background:var(--sunk);color:var(--ink-2);box-shadow:inset 0 0 0 1px var(--line-strong)}
+.principles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:6px}
+.principles div{font-size:11.5px;color:var(--ink-3);line-height:1.45;border-top:1px solid var(--line);padding-top:8px}
+.principles b{display:block;font-family:var(--mono);font-size:10px;color:var(--ink-4);font-weight:500;margin-bottom:3px}
+
+/* panel */
+.p-head{padding:16px 20px 12px;border-bottom:1px solid var(--line)}
+.p-head h1{font-size:15px;font-weight:600;margin:0;letter-spacing:-.01em}
+.p-head .sub{font-size:12px;color:var(--ink-3);margin-top:2px}
+.nextband{margin:0 20px;margin-top:12px;padding:11px 13px;border-radius:10px;font-size:12.5px;color:var(--ink-2);line-height:1.5;display:flex;gap:10px;align-items:flex-start}
+.nextband b{color:var(--ink)}
+.nextband.critical{background:var(--critical-bg)} .nextband.serious{background:var(--serious-bg)} .nextband.warning{background:var(--warning-bg)} .nextband.good{background:var(--good-bg)} .nextband.info{background:var(--info-bg)}
+.nextband .mk{margin-top:5px}
+.nextband .btn{margin-top:7px}
+.p-filters{padding:10px 20px;border-bottom:1px solid var(--line);display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;margin-top:10px}
+.p-filters::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;font-size:12px;padding:4px 10px;border-radius:20px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink-2);cursor:pointer;transition:.14s;display:inline-flex;align-items:center;gap:5px}
+.chip:hover:not(:disabled){border-color:var(--ink-3)}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+.chip:disabled{opacity:.35;cursor:default}
+.chip b{font-weight:500;opacity:.55}
+.chip .mk{width:6px;height:6px;flex-basis:6px}
+.p-body{flex:1;overflow-y:auto;padding:14px 20px 20px}
+.showing{font-size:11px;color:var(--ink-4);margin-bottom:12px;display:flex;justify-content:space-between;gap:10px}
+.showing button{border:0;background:none;font-size:11px;color:var(--ink-2);text-decoration:underline;cursor:pointer;padding:0}
+
+.card{border:1px solid var(--line);border-radius:12px;background:var(--paper);margin-bottom:12px;overflow:hidden;position:relative}
+.card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+.card.sev-high::before{background:var(--critical)} .card.sev-medium::before{background:var(--serious)} .card.sev-low::before{background:var(--warning)}
+.card.done{background:var(--panel)}
+.card.done::before{background:var(--line-strong)}
+.chead{display:flex;align-items:center;gap:8px;padding:11px 16px 0}
+.tok{width:9px;height:9px;flex:0 0 9px;border:1.5px solid var(--ink-4);border-radius:2px;display:inline-block}
+.tok.proposed{background:linear-gradient(135deg,var(--ink-3) 50%,transparent 50%);border-color:var(--ink-3)}
+.tok.decided{background:var(--ink);border-color:var(--ink)}
+.cpath{font-size:11px;color:var(--ink-3);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cid{font-size:10px;color:var(--ink-4);letter-spacing:.05em}
+.specimen{margin:9px 16px 0;padding:11px 13px;border-radius:8px;background:var(--sunk);font-size:15px;line-height:1.4;letter-spacing:-.01em;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.card.done .specimen{opacity:.55}
+.issue{margin:12px 16px 0;border-left:2px solid var(--line-strong);padding-left:12px}
+.issue.model{border-left-color:var(--info)}
+.issue-k{display:flex;align-items:center;gap:8px;margin-bottom:2px;flex-wrap:wrap}
+.issue-k .n{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-3)}
+.issue-k .m{font-size:9.5px;color:var(--ink-4);letter-spacing:.04em}
+.issue-k .m.ai{color:var(--info);font-weight:600}
+.hes{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;color:var(--ink-4);margin-bottom:5px}
+.issue-n{font-size:12.5px;color:var(--ink-2);line-height:1.5}
+.measure{display:flex;gap:16px;margin-top:8px;flex-wrap:wrap}
+.measure div{font-size:11px;color:var(--ink-3)}
+.measure b{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--ink);font-weight:600}
+.cites{margin-top:9px;display:flex;flex-direction:column;gap:6px}
+.cite{font-size:11.5px;color:var(--ink-3);line-height:1.45;padding:7px 9px;border-radius:7px;background:var(--panel);border:1px solid var(--line)}
+.issue.model .cite{background:var(--info-bg);border-color:transparent}
+.cite b{color:var(--ink-2);font-weight:600}
+.xref{margin-top:8px;font-size:11px;color:var(--ink-3)}
+.xref b{color:var(--ink-2);font-weight:600}
+
+.acts{margin-top:14px;padding:13px 16px;background:var(--panel);border-top:1px solid var(--line)}
+.card.done .acts{background:transparent}
+.ask{font-size:12.5px;color:var(--ink-2);line-height:1.5;margin:0 0 10px}
+.ask b{display:block;color:var(--ink);font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:4px}
+.btnrow{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+textarea{font-size:12.5px;font-family:inherit;width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:7px 9px;background:var(--paper);color:var(--ink);resize:vertical;min-height:58px;line-height:1.5;margin-bottom:8px}
+.blocked{font-size:11.5px;color:var(--ink-3);margin-top:8px;display:flex;gap:6px;align-items:flex-start}
+.resolved{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.resolved .r-t{font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.resolved .r-s{font-size:11px;color:var(--ink-4)}
+.empty{border:1px dashed var(--line-strong);border-radius:12px;padding:22px;text-align:center;font-size:12.5px;color:var(--ink-3)}
+
+.p-foot{border-top:1px solid var(--line);background:var(--panel);padding:12px 20px;display:flex;gap:20px}
+.p-foot .n{font-size:19px;font-weight:600;letter-spacing:-.02em;line-height:1.1;display:flex;align-items:center;gap:6px}
+.p-foot .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-4);margin-top:2px}
+
+@media (max-width:1180px){:root{--panel-w:480px}.summary{grid-template-columns:1fr}.principles{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:860px){
+  body{overflow:auto}
+  .main{position:static;display:block}
+  .right{width:auto;border-left:0;border-top:1px solid var(--line-strong);box-shadow:none}
+  .p-body{overflow:visible}
+  .step{grid-template-columns:22px 1fr 60px}
+  .step .cnt{display:none}
+  .ob{grid-template-columns:1fr;gap:24px}
+  .ob-art{order:-1;max-width:260px}
+  .how{grid-template-columns:1fr}
+  .onboard{position:static;align-items:flex-start}
+  .preview span{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <span class="dot"></span>
+  <span class="t">Ledger</span>
+  <span class="s" id="barFlow">   UnoBank</span>
+  <span class="sp"></span>
+  <span class="xs faint" id="barNote"></span>
+  <label class="preview"><span>Preview state</span>
+    <select id="preset" aria-label="Preview state">
+      <option value="empty">1    No flow yet</option>
+      <option value="ready">2    Ready to read</option>
+      <option value="reading">3    Reading the flow</option>
+      <option value="red">4    Rules only, red zone</option>
+      <option value="scanned">5    After AI scan</option>
+      <option value="progress">6    Decisions in progress</option>
+      <option value="green">7    All earned</option>
+      <option value="stale">8    Flow changed after scan</option>
+      <option value="nobase">9    No Anchor baseline</option>
+    </select>
+  </label>
+</div>
+
+<!-- empty, ready and reading states -->
+<section class="onboard" id="onboard">
+  <div class="ob">
+    <div>
+      <h1>See every place your flow asks before it has earned it</h1>
+      <p class="lede">Ledger maps what each screen asks of the user (data, permission, belief, money, attention) against what the product has given them by that point. Where the ask runs ahead, it tells you, and the team decides what to do.</p>
+
+      <div class="how">
+        <div><b>01</b><strong>Reads your flow</strong>Steps from the funnel map, screens from Studio, baseline trust from Anchor.</div>
+        <div><b>02</b><strong>Weighs each ask</strong>Against what the user has received so far. A green or red balance at every step.</div>
+        <div><b>03</b><strong>You decide</strong>Every finding is a proposal. Nothing in the flow changes without a person.</div>
+      </div>
+
+      <div class="ready" id="readyList"></div>
+      <div class="cta" id="obCta"></div>
+      <div class="cta-note" id="obNote"></div>
+    </div>
+    <div class="ob-art" aria-hidden="true">
+      <svg viewBox="0 0 340 380">
+        <g stroke="#f0f0f0">
+          <line x1="20" x2="320" y1="40" y2="40"/><line x1="20" x2="320" y1="120" y2="120"/><line x1="20" x2="320" y1="200" y2="200"/><line x1="20" x2="320" y1="280" y2="280"/><line x1="20" x2="320" y1="360" y2="360"/>
+          <line x1="60" x2="60" y1="20" y2="370"/><line x1="140" x2="140" y1="20" y2="370"/><line x1="220" x2="220" y1="20" y2="370"/><line x1="300" x2="300" y1="20" y2="370"/>
+        </g>
+        <circle cx="20" cy="40" r="3" fill="#141414"/><circle cx="320" cy="40" r="3" fill="#141414"/><circle cx="20" cy="360" r="3" fill="#141414"/><circle cx="320" cy="360" r="3" fill="#141414"/>
+        <path d="M180 70 C 140 120, 110 150, 130 175 S 210 190, 200 220 S 150 270, 170 290 S 260 320, 255 345" fill="none" stroke="#141414" stroke-dasharray="3 4"/>
+        <circle cx="180" cy="70" r="40" fill="none" stroke="#141414"/>
+        <circle cx="120" cy="160" r="30" fill="none" stroke="#141414"/>
+        <circle cx="205" cy="215" r="22" fill="none" stroke="#141414"/>
+        <circle cx="165" cy="285" r="16" fill="none" stroke="#141414"/>
+        <circle cx="255" cy="345" r="11" fill="none" stroke="#141414"/>
+        <circle cx="236" cy="70" r="5" fill="#0ca30c"/><circle cx="72" cy="160" r="5" fill="#0ca30c"/>
+        <circle cx="244" cy="215" r="5" fill="#fab219"/><circle cx="130" cy="285" r="5" fill="#ec835a"/><circle cx="282" cy="345" r="5" fill="#d03b3b"/>
+        <text x="20" y="20" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#8c8c8c">GIVES BEFORE THEY GET</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- live -->
+<div class="main hidden" id="main">
+  <div class="left" id="leftCol">
+    <div id="draftbar"></div>
+    <div id="banner"></div>
+
+    <div class="summary">
+      <div class="gcard">
+        <div id="gauge"></div>
+        <div class="zone" id="zone"></div>
+        <div class="zdesc" id="zdesc"></div>
+        <div class="gflag" id="gflag"></div>
+      </div>
+      <div class="bcard">
+        <div id="breakdown"></div>
+        <div class="stats" id="stats"></div>
+        <details class="how-score">
+          <summary>How the score works</summary>
+          <p>Exchange is 60%: the share of asks made from a positive balance. Decisions is 25%: the share of findings a person has resolved, including "keep as built" with a reason. Measured is 15%: the share of heavy asks with a proxy signal attached. Earned (80+) is only possible when no step is in debt, so a flow in debt caps at 79 however many decisions it has. Ask weights and the baseline are project decisions, set in Anchor and editable per project. The score reflects the team's judgment, not an objective measure of trust.</p><p id="valSource"></p>
+        </details>
+      </div>
+    </div>
+
+    <h2>Sources</h2>
+    <div class="srcbar">
+      <div style="flex:1;min-width:0">
+        <div class="fn" id="srcName">   </div>
+        <div class="st" id="srcNote">   </div>
+        <div class="srcs" id="srcs"></div>
+      </div>
+      <button class="btn tiny info" id="scanBtn">Scan with AI</button>
+    </div>
+
+    <h2>The exchange    what the user gives against what they get</h2>
+    <div class="chart" id="chartWrap">
+      <div id="chart"></div>
+      <div class="tip" id="tip"></div>
+      <div class="legend">
+        <span><span class="sw" style="background:var(--good-bg)"></span>Credit: earned more than asked</span>
+        <span><span class="sw" style="background:var(--critical-bg)"></span>Debt: asked more than earned</span>
+        <span id="lgBuilt"><i class="dash"></i>As built</span>
+        <span id="lgPlan"><i></i>With decisions</span>
+        <span>Circle size = weight of the ask</span>
+      </div>
+    </div>
+
+    <div class="h2row"><h2>Steps    read from the funnel map and Studio</h2><button class="btn tiny" id="editVals">Edit values</button></div>
+    <div id="basebox"></div>
+    <div class="steps" id="steps"></div>
+    <div id="vlog"></div>
+
+    <h2>What every finding is checked against</h2>
+    <div class="principles">
+      <div><b>01</b>Every fair pattern is a promise kept to the user</div>
+      <div><b>02</b>Give before you get</div>
+      <div><b>03</b>Be human in your decisions</div>
+      <div><b>04</b>Balance the head and the heart, and take that balance to the top</div>
+    </div>
+  </div>
+
+  <aside class="right" aria-label="Findings">
+    <div class="p-head">
+      <h1>Findings</h1>
+      <div class="sub" id="pSub">   </div>
+    </div>
+    <div id="nextband"></div>
+    <div class="p-filters" id="filters" role="group" aria-label="Filter findings"></div>
+    <div class="p-body">
+      <div class="showing" id="showing"></div>
+      <div id="cards"></div>
+    </div>
+    <div class="p-foot">
+      <div><div class="n" id="kOpen">0</div><div class="l">Open</div></div>
+      <div><div class="n" id="kDecided">0</div><div class="l">Decided</div></div>
+      <div><div class="n" id="kDebt">0</div><div class="l">Steps in debt</div></div>
+      <div><div class="n" id="kProxy">0</div><div class="l">Asks measured</div></div>
+    </div>
+  </aside>
+</div>
+
+<script>
+/* =========================================================================
+   Ledger
+   Maps every moment a user gives before they get (data, permission, belief,
+   money, attention, content) against what the product has delivered by that
+   point, and flags where an ask exceeds what has been earned.
+
+   Two paths, kept separate at the data layer:
+     rule     deterministic, read from the funnel map and Studio. Runs on save.
+     model    AI scan across Anchor, context notes and research tools, on
+             request, maker-gated. Every model finding cites what it read.
+
+   Color is status, never decoration, and never carries meaning alone:
+     good / warning / serious / critical     zones, severity, balance sign
+     info (blue)                             AI scan, model findings, changes
+   Every colored mark sits next to an ink label.
+
+   The "Preview state" control in the bar exists for review only.
+   ========================================================================= */
+
+const S = {mode:'empty', flow:false, aiScanned:false, scanning:false, scanAt:null,
+           baselineSet:true, extra:false, stale:false};
+/* Values: Plana defaults until the team records its own. Edits are a draft
+   with a live preview until someone records them as a decision with a reason. */
+let VAL = {base:2, give:{}, weight:{}};
+let VLOG = [];
+let DRAFT = null;
+const cur = () => DRAFT || VAL;
+const baseline = () => (S.baselineSet || (DRAFT && DRAFT.baseSet)) ? cur().base : 0;
+const giveOf = s => (s.id in cur().give) ? cur().give[s.id] : s.give.v;
+const weightOf = s => (s.id in cur().weight) ? cur().weight[s.id] : s.ask.weight;
+
+const RULE_SOURCES = ['Anchor', 'Funnel map', 'Studio    9 screens'];
+const AI_SOURCES = ['Context notes    3', 'Personas', 'Journey Map', 'Interviews', 'Content Resolution', 'Regulatory checks', 'Experience measurement'];
+
+const STEPS = [
+  {id:'s1', short:'Welcome',  name:'Welcome', screen:'Studio / Onboarding / Welcome',
+   give:{v:3, label:'Free account, no monthly fee, stated upfront'},
+   ask:{type:'attention', label:'Read a three-screen intro', weight:1, reason:true, exit:true}},
+  {id:'s2', short:'Phone',    name:'Mobile number', screen:'Studio / Onboarding / Phone',
+   give:{v:0, label:''},
+   ask:{type:'data', label:'Mobile number', weight:2, reason:false, exit:null}},
+  {id:'s3', short:'Notify',   name:'Notifications', screen:'Studio / Onboarding / Permission prompt',
+   give:{v:0, label:''},
+   ask:{type:'permission', label:'Push notifications, OS prompt', weight:3, reason:false, exit:false, movable:true}},
+  {id:'s4', short:'Identity', name:'Identity', screen:'Studio / Onboarding / Identity step',
+   give:{v:1, label:'Progress shown: step 2 of 4'},
+   ask:{type:'data', label:'Passport scan and selfie', weight:5, reason:true, exit:null, proxy:'Return after error', regulated:true}},
+  {id:'s5', short:'Prefs',    name:'Preferences', screen:'Studio / Onboarding / Preferences',
+   give:{v:0, label:''},
+   ask:{type:'attention', label:'Marketing emails and offers', weight:2, reason:false, exit:false, defaultOn:true, movable:true}},
+  {id:'s6', short:'Terms',    name:'Terms', screen:'Studio / Onboarding / Terms',
+   give:{v:0, label:''},
+   ask:{type:'belief', label:'Accept Terms and Privacy Policy, one checkbox', weight:3, reason:false, exit:null, bundled:true}},
+  {id:'s7', short:'Fund',     name:'Fund account', screen:'Studio / Onboarding / Top up',
+   give:{v:0, label:''},
+   ask:{type:'money', label:'Top up   20 to activate', weight:4, reason:true, exit:null, movable:true}},
+  {id:'s8', short:'Home',     name:'Account home', screen:'Studio / Home / Account',
+   give:{v:6, label:'Virtual card, account number and balance ready'},
+   ask:null},
+  {id:'s9', short:'Contacts', name:'Send money', screen:'Studio / Payments / Send',
+   give:{v:3, label:'Free instant transfers to friends'},
+   ask:{type:'permission', label:'Contacts access', weight:3, reason:true, exit:true, proxy:'Grant / decline rate'}}
+];
+const EXTRA = {id:'s6b', short:'Income', name:'Income details', screen:'Studio / Onboarding / Income', isNew:true,
+   give:{v:0, label:''},
+   ask:{type:'data', label:'Annual income and employer', weight:3, reason:false, exit:null, movable:true}};
+const HOME = 's8';
+const PROXIES = ['Grant / decline rate', 'Undo usage', 'Return after error', 'Second session after a big ask'];
+
+function activeSteps(){
+  if (!S.extra) return STEPS;
+  const i = STEPS.findIndex(s => s.id === 's6') + 1;
+  return STEPS.slice(0, i).concat(EXTRA, STEPS.slice(i));
+}
+const step = id => STEPS.concat(EXTRA).find(s => s.id === id);
+
+/* what the AI scan reads across the project. Fixture data. */
+const RESEARCH = {
+  s7:{note:'The research says this user will not put money into a new bank before seeing it is real. The flow asks for   20 before showing the card.',
+      cites:[
+        {tool:'Interviews', ref:'INT-07    Amina', text:'Said she would not fund a new account until she had seen her card and account number.'},
+        {tool:'Personas', ref:'Amina    switcher', text:'Left her last bank after a frozen account. Trust is the barrier, not features.'},
+        {tool:'Anchor   6', ref:'Assumption A-04', text:'"Users will fund on day one." Status: unvalidated.'}]},
+  s3:{note:'The business wants notifications for retention; the user is at their most wary at this stage. The tension is real and it is the team\'s call. Ledger does not pick a side.',
+      cites:[
+        {tool:'Journey Map', ref:'Sign-up stage', text:'Emotion marked wary (-2). Pain point: "Why is a bank asking for this already?"'},
+        {tool:'Context note', ref:'Funnel map', text:'Product stance: notifications drive day-7 retention.'}]}
+};
+
+const CHECKS = {
+  seq:   {label:'Sequencing',    hes:'WHAT DO I GET FOR THIS?',                  method:'rule',  sev:'high'},
+  fit:   {label:'Research fit',  hes:'THIS ISN\'T FOR ME',                       method:'model', sev:'high'},
+  reason:{label:'Justification', hes:'WHY DOES IT NEED THAT?',                   method:'rule',  sev:'medium'},
+  exit:  {label:'Off-switch',    hes:'CAN I TURN IT OFF LATER?',                 method:'rule',  sev:'medium'},
+  def:   {label:'Default state', hes:'EVERYONE DOES THIS, RIGHT?',               method:'rule',  sev:'medium'},
+  legib: {label:'Legibility',    hes:'I NEVER READ THESE    IT\'S PROBABLY FINE', method:'model', sev:'medium'},
+  proxy: {label:'Measurability', hes:'WOULD THE METRICS EVER SHOW IT?',          method:'rule',  sev:'low'}
+};
+const SEV = {high:{label:'High', cls:'critical'}, medium:{label:'Medium', cls:'serious'}, low:{label:'Low', cls:'warning'}};
+
+const ZONES = [
+  {from:0,  to:40,  key:'critical', label:'Overdrawn', desc:'The flow asks for more than it gives at most steps.'},
+  {from:40, to:60,  key:'serious',  label:'Strained',  desc:'Several asks land before the product has earned them.'},
+  {from:60, to:80,  key:'warning',  label:'Watch',     desc:'Mostly earned. A few asks still need a decision.'},
+  {from:80, to:101, key:'good',     label:'Earned',    desc:'Every ask lands after the product has given enough.'}
+];
+const zoneOf = v => ZONES.find(z => v >= z.from && v < z.to);
+
+const FILTERS = [
+  {k:'all', label:'All'}, {k:'open', label:'Open'}, {k:'decided', label:'Decided'},
+  {k:'high', label:'High', mk:'critical'}, {k:'medium', label:'Medium', mk:'serious'}, {k:'low', label:'Low', mk:'warning'},
+  {k:'model', label:'AI scan', mk:'info'},
+  {k:'seq', label:'Sequencing'}, {k:'reason', label:'Justification'}, {k:'exit', label:'Off-switch'},
+  {k:'def', label:'Defaults'}, {k:'legib', label:'Legibility'}, {k:'fit', label:'Research fit'}, {k:'proxy', label:'Measurability'}
+];
+
+const $ = id => document.getElementById(id);
+const now = () => new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const sign = n => (n > 0 ? '+' : '') + n;
+
+let VERDICT = {};
+let filter = 'all', focus = null;
+
+/* ---------- the plan: decisions applied to the flow ---------- */
+const EMPTY = {moved:{}, boost:{}, reason:{}, exit:{}, defOff:{}, unbundled:{}, dropped:{}, proxy:{}};
+function plan(){
+  const p = {moved:{}, boost:{}, reason:{}, exit:{}, defOff:{}, unbundled:{}, dropped:{}, proxy:{}};
+  Object.entries(VERDICT).forEach(([key, v]) => {
+    if (v.state !== 'decided' || !v.effect) return;
+    const id = key.split('.')[0];
+    const [eff, arg] = v.effect.split(':');
+    if (eff === 'proxy') p.proxy[id] = arg;
+    else if (p[eff]) p[eff][id] = true;
+  });
+  return p;
+}
+const hasDecisions = () => Object.values(VERDICT).some(v => v.state === 'decided' && v.effect);
+
+function order(p){
+  const ids = activeSteps().map(s => s.id);
+  const base = ids.filter(id => !p.moved[id]);
+  const moved = ids.filter(id => p.moved[id]);
+  const at = base.indexOf(HOME) + 1;
+  return base.slice(0, at).concat(moved, base.slice(at));
+}
+function cost(s, p){
+  const a = s.ask;
+  if (!a || p.dropped[s.id]) return 0;
+  let w = weightOf(s);
+  if (a.reason || p.reason[s.id]) w -= 1;
+  if (a.exit === true || p.exit[s.id]) w -= 1;
+  if (a.defaultOn && !p.defOff[s.id]) w += 1;
+  if (a.bundled && !p.unbundled[s.id]) w += 1;
+  return Math.max(1, w);
+}
+function run(p){
+  let credit = baseline();
+  return order(p).map(id => {
+    const s = step(id);
+    const give = giveOf(s) + (p.boost[id] ? 2 : 0);
+    const before = credit + give;
+    const c = cost(s, p);
+    credit = before - c;
+    return {id, before, cost:c, after:credit, give, short:s.short};
+  });
+}
+
+/* ---------- checks ---------- */
+function lastGiveBefore(id){
+  const list = activeSteps();
+  const idx = list.findIndex(s => s.id === id);
+  for (let i = idx - 1; i >= 0; i--) if (giveOf(list[i]) > 0) return 'step ' + (i + 1);
+  return 'the start';
+}
+
+function findings(){
+  const built = run(EMPTY);
+  const now_ = run(plan());
+  const list = activeSteps();
+  const out = [];
+  built.forEach(r => {
+    const s = step(r.id), a = s.ask;
+    if (!a) return;
+    const k = c => s.id + '.' + c;
+    const keep = {label:'Keep    record why', keep:true};
+
+    if (r.cost > r.before){
+      const fair = a.reason && a.exit === true;
+      const decided = VERDICT[k('seq')] && VERDICT[k('seq')].state === 'decided';
+      const cur = decided ? r : (now_.find(x => x.id === s.id) || r);
+      if (!decided && cur.cost <= cur.before){
+        out.push({key:k('seq'), id:s.id, check:'seq', cleared:true,
+          note:'Decisions elsewhere in the flow already cover this ask. As built it was short by ' + (r.cost - r.before) + '; it now lands with ' + cur.before + ' earned against a cost of ' + cur.cost + '. Confirm to close it.',
+          measure:[{l:'Earned by here', v:cur.before, tone:'good'}, {l:'Ask costs', v:cur.cost}, {l:'As built, short by', v:r.cost - r.before}],
+          cites:[{tool:'Ledger', ref:'Plan', text:'Cleared by decisions on other steps, not on this one.'}],
+          options:[{label:'Confirm: covered upstream', effect:null, sends:null}, keep]
+        });
+      } else out.push({key:k('seq'), id:s.id, check:'seq',
+        note: fair
+          ? 'This ask is fair on its own: it carries a reason and an off-switch. It fails because the user reaches it already in debt from earlier steps. Fix those steps, not this one.'
+          : 'The user is asked for more than the product has given them by this point. They reach this screen with ' + cur.before + ' earned and the ask costs ' + cur.cost + '.',
+        measure:[{l:'Earned by here', v:cur.before, tone:cur.before < 0 ? 'critical' : 'good'}, {l:'Ask costs', v:cur.cost}, {l:'Short by', v:cur.cost - cur.before, tone:'critical'}],
+        cites:[{tool:'Funnel map', ref:s.name, text:'Position ' + (list.indexOf(s) + 1) + ' of ' + list.length + '. Nothing given since ' + lastGiveBefore(s.id) + '.'}],
+        options: fair
+          ? [{label:'Fix upstream, no change here', effect:null, sends:null}]
+          : [
+              a.movable ? {label:'Move after Account home', effect:'moved', sends:'Funnel map'}
+                        : {label:'Move after Account home', blocked: a.regulated ? 'Cannot move: identity has to precede moving money. Anchor   1    DEC-0104.' : 'Cannot move: the account cannot be created without it.'},
+              {label:'Give first: show value before asking', effect:'boost', sends:'Studio    Trace'},
+              keep
+            ]
+      });
+    }
+    if (!a.reason && weightOf(s) >= 2){
+      out.push({key:k('reason'), id:s.id, check:'reason',
+        note:'Nothing on this screen says why the product needs it. The user fills the gap with their own guess, and the guess is rarely generous.',
+        cites:[{tool:'Studio', ref:s.screen, text:'No explanation element bound to this ask.'}],
+        options:[
+          {label:'Require a reason at the moment of asking', effect:'reason', sends:'Content Resolution'},
+          a.movable ? {label:'Drop the ask', effect:'dropped', sends:'Funnel map'} : null,
+          keep
+        ].filter(Boolean)
+      });
+    }
+    if (a.exit === false){
+      out.push({key:k('exit'), id:s.id, check:'exit',
+        note:'No visible way to change this later. A permission that cannot be undone is a bigger ask than the same permission with an exit in sight.',
+        cites:[{tool:'Studio', ref:s.screen, text:'No settings path or undo declared for this ask.'}],
+        options:[{label:'Say where to change it later', effect:'exit', sends:'Content Resolution'}, keep]
+      });
+    }
+    if (a.defaultOn){
+      out.push({key:k('def'), id:s.id, check:'def',
+        note:'Opted in by default. The user who notices learns the product decides for them; the user who doesn\'t finds out in their inbox.',
+        cites:[{tool:'Studio', ref:s.screen, text:'Checkbox ships ticked (meta.defaultState).'}],
+        xref:'Also open in <b>Regulatory checks    ePrivacy</b>. Approval routes there; Ledger records only the design decision.',
+        options:[{label:'Default off', effect:'defOff', sends:'Studio    Trace'}, keep]
+      });
+    }
+    if (weightOf(s) >= 3 && !a.proxy){
+      out.push({key:k('proxy'), id:s.id, check:'proxy',
+        note:'Nothing is instrumented to show hesitation here. If users drop off at this ask, it will read as a quiet leave, not a decision anyone can trace.',
+        cites:[{tool:'Experience measurement', ref:'Signals', text:'No proxy signal attached to this step.'}],
+        options: PROXIES.map(px => ({label:px, effect:'proxy:' + px, sends:'Experience measurement'})),
+        pick:'Pick the signal that would show hesitation here.'
+      });
+    }
+    if (S.aiScanned && a.bundled){
+      out.push({key:k('legib'), id:s.id, check:'legib',
+        note:'Fourteen pages behind one checkbox, covering terms, privacy and data sharing at once. Nobody reads it; everyone accepts it. That is resignation, not consent.',
+        cites:[
+          {tool:'Content Resolution', ref:'Terms', text:'No layered summary authored above the full document.'},
+          {tool:'Regulatory checks', ref:'GDPR Art.7', text:'Consent flag open on the same element.'}],
+        options:[
+          {label:'Split consent per purpose', effect:'unbundled', sends:'Studio    Trace'},
+          {label:'Layered summary above full terms', effect:'reason', sends:'Content Resolution'},
+          keep]
+      });
+    }
+    if (S.aiScanned && RESEARCH[s.id]){
+      out.push({key:k('fit'), id:s.id, check:'fit',
+        note:RESEARCH[s.id].note, cites:RESEARCH[s.id].cites,
+        options:[a.movable ? {label:'Move after Account home', effect:'moved', sends:'Funnel map'} : null, keep].filter(Boolean)
+      });
+    }
+  });
+  return out;
+}
+
+/* ---------- score ---------- */
+const stateOf = f => (VERDICT[f.key] && VERDICT[f.key].state === 'decided') ? 'decided' : 'open';
+
+function scoreFor(p, fs, useVerdicts, vals){
+  const keepD = DRAFT, keepV = VAL;
+  if (vals){ DRAFT = null; VAL = vals; }
+  const rs = run(p);
+  const asks = rs.filter(r => r.cost > 0);
+  const exch = asks.length ? asks.filter(r => r.cost <= r.before).length / asks.length : 1;
+  const dec = useVerdicts ? fs.filter(f => stateOf(f) === 'decided').length : 0;
+  const cov = fs.length ? dec / fs.length : 1;
+  const heavy = activeSteps().filter(s => s.ask && weightOf(s) >= 3 && !p.dropped[s.id]);
+  const measured = heavy.filter(s => s.ask.proxy || p.proxy[s.id]).length;
+  const meas = heavy.length ? measured / heavy.length : 1;
+  const raw = Math.round(100 * (0.6 * exch + 0.25 * cov + 0.15 * meas));
+  if (vals){ DRAFT = keepD; VAL = keepV; }
+  const inDebt = rs.some(r => r.after < 0);
+  return {
+    total: inDebt ? Math.min(raw, 79) : raw, capped: inDebt && raw > 79,
+    exch, cov, meas, asks:asks.length, okAsks:asks.filter(r => r.cost <= r.before).length,
+    dec, findings:fs.length, heavy:heavy.length, measured, rs
+  };
+}
+
+/* ---------- gauge ---------- */
+function gauge(v, muted){
+  const cx = 110, cy = 112, r = 86, w = 14;
+  const pt = (val, rad) => { const a = Math.PI * (1 - val / 100); return [cx + rad * Math.cos(a), cy - rad * Math.sin(a)]; };
+  const arc = (a, b) => { const p1 = pt(a, r), p2 = pt(b, r); return 'M' + p1[0].toFixed(1) + ' ' + p1[1].toFixed(1) + ' A' + r + ' ' + r + ' 0 0 1 ' + p2[0].toFixed(1) + ' ' + p2[1].toFixed(1); };
+  const col = {critical:'#d03b3b', serious:'#ec835a', warning:'#fab219', good:'#0ca30c'};
+  const faint = {critical:'#fbeaea', serious:'#fdefe8', warning:'#fff6dd', good:'#e9f7e9'};
+  let s = '<svg viewBox="0 0 220 132" role="img" aria-label="Trust score ' + v + ' of 100">';
+  ZONES.forEach(z => {
+    const a = z.from + 0.8, b = Math.min(z.to, 100) - 0.8;
+    s += '<path d="' + arc(a, b) + '" fill="none" stroke="' + faint[z.key] + '" stroke-width="' + w + '"/>';
+    if (v > z.from && !muted){
+      s += '<path d="' + arc(a, Math.max(a + 0.1, Math.min(b, v))) + '" fill="none" stroke="' + col[z.key] + '" stroke-width="' + w + '"/>';
+    }
+  });
+  const m = pt(Math.max(1, Math.min(99, v)), r);
+  s += '<circle cx="' + m[0].toFixed(1) + '" cy="' + m[1].toFixed(1) + '" r="9" fill="#fff" stroke="#141414" stroke-width="2"/>';
+  [0, 40, 60, 80, 100].forEach(t => {
+    const p = (t === 0 || t === 100) ? [pt(t, r)[0], cy + 17] : pt(t, r + 16);
+    s += '<text x="' + p[0].toFixed(1) + '" y="' + (p[1] + 3).toFixed(1) + '" text-anchor="middle" font-size="9" fill="#b6b6b6">' + t + '</text>';
+  });
+  s += '<text x="' + cx + '" y="' + (cy - 14) + '" text-anchor="middle" font-size="40" font-weight="600" letter-spacing="-1.5" fill="' + (muted ? '#b6b6b6' : '#141414') + '">' + v + '</text>';
+  s += '<text x="' + cx + '" y="' + (cy + 4) + '" text-anchor="middle" font-size="10" fill="#8c8c8c" letter-spacing=".6">TRUST BALANCE</text>';
+  return s + '</svg>';
+}
+
+/* ---------- chart ---------- */
+function chart(){
+  const p = plan();
+  const decided = hasDecisions();
+  const built = run(EMPTY), planned = run(p);
+  const all = built.concat(decided ? planned : []);
+  const yMax = Math.max(...all.map(r => Math.max(r.before, r.after)), 3) + 1;
+  const yMin = Math.min(...all.map(r => r.after), -2) - 1;
+  const W = 640, H = 236, L = 30, R = 34, T = 14, B = 30;
+  const n = built.length;
+  const x = i => L + i * (W - L - R) / (n - 1);
+  const y = v => T + (yMax - v) / (yMax - yMin) * (H - T - B);
+  const line = rs => rs.map((r,i) => x(i).toFixed(1) + ',' + y(r.after).toFixed(1)).join(' ');
+  const shown = decided ? planned : built;
+
+  let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Trust balance across the flow">'
+    + '<rect x="' + L + '" y="' + T + '" width="' + (W - L - R) + '" height="' + (y(0) - T) + '" fill="#e9f7e9" opacity=".7"/>'
+    + '<rect x="' + L + '" y="' + y(0) + '" width="' + (W - L - R) + '" height="' + (H - B - y(0)) + '" fill="#fbeaea" opacity=".8"/>'
+    + '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(0) + '" y2="' + y(0) + '" stroke="#141414" stroke-width="1"/>'
+    + '<text x="' + (L - 6) + '" y="' + (y(0) + 3) + '" text-anchor="end" font-size="9.5" fill="#8c8c8c">0</text>'
+    + '<text x="' + (W - R - 4) + '" y="' + (T + 12) + '" text-anchor="end" font-size="9.5" fill="#5a5a5a">credit</text>'
+    + '<text x="' + (W - R - 4) + '" y="' + (H - B - 6) + '" text-anchor="end" font-size="9.5" fill="#5a5a5a">debt</text>';
+
+  if (focus){
+    const i = shown.findIndex(r => r.id === focus);
+    if (i >= 0) s += '<line x1="' + x(i) + '" x2="' + x(i) + '" y1="' + T + '" y2="' + (H - B) + '" stroke="#141414" stroke-opacity=".08" stroke-width="12"/>';
+  }
+  s += '<polyline points="' + line(built) + '" fill="none" stroke="' + (decided ? '#b6b6b6' : '#141414') + '" stroke-width="' + (decided ? 1.5 : 2) + '"' + (decided ? ' stroke-dasharray="4 4"' : '') + '/>';
+  if (decided) s += '<polyline points="' + line(planned) + '" fill="none" stroke="#141414" stroke-width="2"/>';
+
+  shown.forEach((r,i) => {
+    if (r.cost) s += '<circle cx="' + x(i) + '" cy="' + y(r.after) + '" r="' + (3 + r.cost * 1.7) + '" fill="none" stroke="#141414" stroke-opacity=".35" stroke-width="1"/>';
+    s += '<circle cx="' + x(i) + '" cy="' + y(r.after) + '" r="5" fill="' + (r.after < 0 ? '#d03b3b' : '#0ca30c') + '" stroke="#fff" stroke-width="2"/>';
+    s += '<rect data-hit="' + i + '" x="' + (x(i) - 26) + '" y="' + T + '" width="52" height="' + (H - T - B) + '" fill="transparent"/>';
+  });
+  shown.forEach((r,i) => {
+    const st = step(r.id);
+    const fill = st.isNew ? '#2f6feb' : (r.id === focus ? '#141414' : '#8c8c8c');
+    s += '<text x="' + x(i) + '" y="' + (H - 10) + '" text-anchor="middle" font-size="9.5" fill="' + fill + '"' + (r.id === focus || st.isNew ? ' font-weight="600"' : '') + '>' + r.short + '</text>';
+  });
+  $('chart').innerHTML = s + '</svg>';
+  $('lgPlan').style.display = decided ? '' : 'none';
+  $('lgBuilt').innerHTML = decided ? '<i class="dash"></i>As built' : '<i></i>As built';
+  chart.shown = shown; chart.x = x; chart.y = y; chart.W = W;
+}
+
+/* ---------- steps ---------- */
+const pips = c => '<span style="white-space:nowrap">' + [1,2,3,4,5].map(i => '<span class="pip ' + (i <= c ? 'on' : '') + '"></span>').join('') + '</span>';
+function renderSteps(fs){
+  const p = plan();
+  $('steps').innerHTML = run(p).map((r,i) => {
+    const s = step(r.id), a = s.ask;
+    const mine = fs.filter(f => f.id === s.id);
+    const open = mine.filter(f => stateOf(f) === 'open');
+    const worst = ['high','medium','low'].find(sv => open.some(f => CHECKS[f.check].sev === sv));
+    const tags = [];
+    if (s.isNew) tags.push('<span class="tag new">new since scan</span>');
+    if (!DRAFT && ((s.id in VAL.give) || (s.id in VAL.weight))) tags.push('<span class="tag team">team value</span>');
+    if (p.moved[s.id]) tags.push('<span class="tag ghost">moved</span>');
+    if (p.boost[s.id]) tags.push('<span class="tag ghost">gives first</span>');
+    if (p.dropped[s.id]) tags.push('<span class="tag ghost">ask dropped</span>');
+    const neg = r.after < 0;
+    return '<div class="step" data-step="' + s.id + '" role="button" tabindex="0" aria-pressed="' + (focus === s.id) + '">'
+      + '<span class="n">' + String(i + 1).padStart(2,'0') + '</span>'
+      + '<div><div class="nm">' + s.name + tags.join('') + '</div>'
+      + '<div class="ex">'
+      +   (r.give ? '<span class="gv"><span class="mk good sq"></span><b>Gets</b></span> ' + (s.give.label || 'Value shown before the ask') + '<br>' : '')
+      +   (a && !p.dropped[s.id] ? '<span class="gv"><span class="mk serious sq"></span><b>Gives</b></span> <span class="tag">' + a.type + '</span> ' + a.label + ' ' + pips(r.cost) : (a ? '<b>Gives</b> nothing now' : ''))
+      + '</div>'
+      + (DRAFT ? editRow(s) : '')
+      + '</div>'
+      + '<div class="bal"><span class="num"><span class="mk ' + (neg ? 'critical' : 'good') + '"></span>' + sign(r.after) + '</span><small>' + (neg ? 'debt' : 'credit') + '</small></div>'
+      + '<div class="cnt">' + (open.length ? '<span class="pill ' + SEV[worst].cls + '">' + open.length + ' open</span>'
+                               : (mine.length ? '<span class="pill good">    settled</span>' : '<span class="xs faint">clean</span>')) + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+/* ---------- value editing ---------- */
+function stepper(kind, id, val, min, max, changed){
+  return '<span class="stepper' + (changed ? ' chg' : '') + '">'
+    + '<button data-val="' + kind + '" data-id="' + id + '" data-d="-1"' + (val <= min ? ' disabled' : '') + ' aria-label="Decrease">   </button>'
+    + '<span>' + val + '</span>'
+    + '<button data-val="' + kind + '" data-id="' + id + '" data-d="1"' + (val >= max ? ' disabled' : '') + ' aria-label="Increase">+</button></span>';
+}
+function editRow(s){
+  const g = giveOf(s), gOld = (s.id in VAL.give) ? VAL.give[s.id] : s.give.v;
+  let h = '<div class="edrow" data-noselect="1"><label><span class="mk good sq"></span>Gives ' + stepper('give', s.id, g, 0, 6, g !== gOld) + '</label>';
+  if (s.ask){
+    const w = weightOf(s), wOld = (s.id in VAL.weight) ? VAL.weight[s.id] : s.ask.weight;
+    h += '<label><span class="mk serious sq"></span>Ask weight ' + stepper('weight', s.id, w, 1, 5, w !== wOld) + '</label>';
+  }
+  return h + '</div>';
+}
+function draftChanges(){
+  if (!DRAFT) return [];
+  const out = [];
+  const baseNow = S.baselineSet ? VAL.base : null;
+  if (DRAFT.baseSet && DRAFT.base !== baseNow) out.push('Baseline trust ' + (baseNow === null ? 'unset' : baseNow) + '     ' + DRAFT.base);
+  activeSteps().forEach(s => {
+    const gOld = (s.id in VAL.give) ? VAL.give[s.id] : s.give.v;
+    if (giveOf(s) !== gOld) out.push(s.name + ' gives ' + gOld + '     ' + giveOf(s));
+    if (s.ask){
+      const wOld = (s.id in VAL.weight) ? VAL.weight[s.id] : s.ask.weight;
+      if (weightOf(s) !== wOld) out.push(s.name + ' ask weight ' + wOld + '     ' + weightOf(s));
+    }
+  });
+  return out;
+}
+function renderValues(sc){
+  const ed = !!DRAFT;
+  $('editVals').textContent = ed ? 'Editing values' : 'Edit values';
+  $('editVals').disabled = ed;
+  const b = baseline();
+  $('basebox').innerHTML = !ed ? '' :
+    '<div class="basebox"><span class="k">Baseline trust</span><span class="xs faint">writes to Anchor   2</span>'
+    + stepper('base', '-', b, 0, 5, DRAFT.baseSet && DRAFT.base !== (S.baselineSet ? VAL.base : null))
+    + '<span class="hint">What the user brings before the first screen. New or unknown brand: 0 to 2. Established brand or a referral: 3 to 5.</span></div>';
+
+  const ch = draftChanges();
+  if (ed){
+    const was = scoreFor(plan(), findingsWith(VAL), true, VAL).total;
+    $('draftbar').innerHTML = '<div class="draftbar"><div class="dt"><b>Editing values    ' + (ch.length ? ch.length + ' change' + (ch.length === 1 ? '' : 's') : 'no changes yet') + '.</b> '
+      + (ch.length ? 'Preview: score ' + was + '     ' + sc.total + '. Nothing is saved until you record it.' : 'Change what each step gives and what each ask weighs. The chart and score preview live.')
+      + (ch.length ? '<textarea id="valWhy" placeholder="Why these values? Recorded as a decision with your name, so the next person sees a reason, not a tweak.">' + esc(DRAFT.why || '') + '</textarea>' : '')
+      + '</div><div class="btnrow"><button class="btn primary" data-vact="record"' + (ch.length ? '' : ' disabled') + '>Record decision</button><button class="btn" data-vact="discard">Discard</button></div></div>';
+  } else $('draftbar').innerHTML = '';
+
+  $('vlog').innerHTML = !VLOG.length ? '' :
+    '<div class="vlog"><div class="vh">Value decisions    ' + VLOG.length + '</div>'
+    + VLOG.map(v => '<div class="vi"><b>' + v.id + '</b>    ' + v.changes.join('    ') + '<br>' + esc(v.why) + '<div class="meta">' + v.who + '    ' + v.at + '</div></div>').join('') + '</div>';
+  $('valSource').textContent = VLOG.length ? 'Current values: team-set, last changed in ' + VLOG[0].id + ' by ' + VLOG[0].who + '.' : 'Current values: Plana defaults. Nobody on this project has changed them yet.';
+}
+/* score and findings against a specific value set, for the before/after preview */
+function findingsWith(v){ const keep = DRAFT; DRAFT = null; const save = VAL; VAL = v; const f = findings(); VAL = save; DRAFT = keep; return f; }
+
+/* ---------- cards ---------- */
+function matches(f){
+  if (focus && f.id !== focus) return false;
+  const c = CHECKS[f.check];
+  switch (filter){
+    case 'all': return true;
+    case 'open': case 'decided': return stateOf(f) === filter;
+    case 'high': case 'medium': case 'low': return c.sev === filter;
+    case 'model': return c.method === 'model';
+    default: return f.check === filter;
+  }
+}
+
+function card(f){
+  const s = step(f.id), c = CHECKS[f.check], v = VERDICT[f.key] || {};
+  const done = stateOf(f) === 'decided';
+  const sev = SEV[c.sev];
+  let acts;
+  if (done){
+    const kept = !v.effect && v.option === 'Kept as built';
+    acts = '<div class="resolved"><span style="display:flex;gap:8px;align-items:center"><span class="tok decided"></span><span>'
+      + '<span class="r-t">' + (kept ? '<span class="mk serious"></span>' : '<span class="mk good"></span>') + esc(v.option) + '</span><br>'
+      + '<span class="r-s">' + (v.reason ? esc(v.reason) + '    ' : '') + (v.sends ? 'Sent to ' + v.sends + '    ' : '') + 'Hamza    ' + v.at + '</span></span></span>'
+      + '<button class="btn tiny" data-act="reopen" data-key="' + f.key + '">Reopen</button></div>';
+  } else if (v.asking){
+    acts = '<p class="ask"><b>Keep as built</b>Keeping it is a decision too. Say why, so the next person reads a reason instead of an accident.</p>'
+      + '<textarea data-why="' + f.key + '" placeholder="Why does this stay as it is?">' + esc(v.draft || '') + '</textarea>'
+      + '<div class="btnrow"><button class="btn primary" data-act="keep" data-key="' + f.key + '">Record</button>'
+      + '<button class="btn" data-act="cancel" data-key="' + f.key + '">Cancel</button></div>';
+  } else {
+    const blocked = f.options.filter(o => o.blocked);
+    let first = true;
+    acts = '<p class="ask"><b>Decision required</b>' + (f.pick || 'Ledger proposes; it does not change the flow. Pick how the team resolves it.') + '</p>'
+      + '<div class="btnrow">'
+      + f.options.map((o,i) => {
+          if (o.blocked) return '<button class="btn" disabled>' + o.label + '</button>';
+          const cls = first && !o.keep ? 'primary' : ''; if (!o.keep) first = false;
+          return '<button class="btn ' + cls + '" data-act="' + (o.keep ? 'ask' : 'pick') + '" data-key="' + f.key + '" data-i="' + i + '">' + o.label + '</button>';
+        }).join('')
+      + '</div>'
+      + blocked.map(o => '<div class="blocked"><span class="mk serious sq" style="margin-top:4px"></span>' + o.blocked + '</div>').join('');
+  }
+  return '<div class="card sev-' + c.sev + (done ? ' done' : '') + '" data-card="' + f.id + '">'
+    + '<div class="chead"><span class="tok ' + (done ? 'decided' : 'proposed') + '"></span><span class="cpath">' + s.screen + '</span>'
+    +   (done ? '' : '<span class="pill ' + sev.cls + '"><span class="mk ' + sev.cls + '"></span>' + sev.label + '</span>')
+    +   '<span class="cid">' + f.key + '</span></div>'
+    + '<div class="specimen"><span>' + s.ask.label + '</span><span class="tag">' + s.ask.type + '</span></div>'
+    + '<div class="issue ' + (c.method === 'model' ? 'model' : '') + '">'
+    +   '<div class="issue-k"><span class="n">' + c.label + '</span>'
+    +     (c.method === 'model' ? '<span class="m ai">AI scan    model</span>' : '<span class="m">rule</span>') + '</div>'
+    +   '<div class="hes">' + c.hes + '</div>'
+    +   '<div class="issue-n">' + f.note + '</div>'
+    +   (f.measure ? '<div class="measure">' + f.measure.map(m => '<div>' + m.l + '<b>' + (m.tone ? '<span class="mk ' + m.tone + '"></span>' : '') + m.v + '</b></div>').join('') + '</div>' : '')
+    +   '<div class="cites">' + f.cites.map(ct => '<div class="cite"><b>' + ct.tool + '</b>    ' + ct.ref + '<br>' + ct.text + '</div>').join('') + '</div>'
+    +   (f.xref ? '<div class="xref">' + f.xref + '</div>' : '')
+    + '</div>'
+    + '<div class="acts">' + acts + '</div></div>';
+}
+
+/* ---------- render ---------- */
+function renderOnboard(){
+  const flow = S.flow;
+  const rows = [
+    {k:'Baseline trust', src:'Anchor   2', ok:S.baselineSet, v:S.baselineSet ? 'Set    2, new brand' : 'Not set'},
+    {k:'Steps', src:'Funnel map', ok:flow, v:flow ? 'Onboarding    9 steps' : 'No flow yet'},
+    {k:'Screens', src:'Studio', ok:flow, v:flow ? '9 screens linked' : '0 screens'}
+  ];
+  $('readyList').innerHTML = rows.map((r, i) => {
+    let mark;
+    if (S.mode === 'reading') mark = (i < S.readStep) ? '<span class="mk good"></span>' : (i === S.readStep ? '<span class="spin"></span>' : '<span class="mk" style="background:var(--line-strong)"></span>');
+    else mark = r.ok ? '<span class="mk good"></span>' : '<span class="mk" style="background:var(--line-strong)"></span>';
+    return '<div class="r">' + mark + '<span class="k">' + r.k + ' <span class="xs faint">   ' + r.src + '</span></span><span class="v">' + r.v + '</span></div>';
+  }).join('');
+
+  if (S.mode === 'empty'){
+    $('obCta').innerHTML = '<button class="btn primary lg" data-go="openfunnel">Open funnel map</button><button class="btn lg" data-go="sample">Try with a sample flow</button>';
+    $('obNote').textContent = S.note || 'Ledger reads a flow once it has at least two steps. Screens are optional; the funnel map alone is enough to start.';
+  } else if (S.mode === 'ready'){
+    $('obCta').innerHTML = '<button class="btn primary lg" data-go="read">Read the flow</button>';
+    $('obNote').textContent = 'Rules only. Instant, and uses no AI allowance. You can run the AI scan after.';
+  } else {
+    $('obCta').innerHTML = '<button class="btn primary lg" disabled>Reading   </button>';
+    $('obNote').textContent = 'Weighing 8 asks against what each step gives.';
+  }
+}
+
+function render(){
+  const live = !['empty','ready','reading'].includes(S.mode);
+  $('onboard').classList.toggle('hidden', live);
+  $('main').classList.toggle('hidden', !live);
+  $('barFlow').textContent = '   UnoBank' + (S.flow ? '    Onboarding flow' : '');
+  if (!live){ renderOnboard(); $('barNote').textContent = ''; return; }
+
+  const fs = findings();
+  const p = plan();
+  const sc = scoreFor(p, fs, true);
+  const before = scoreFor(EMPTY, fs, false);
+  const z = zoneOf(sc.total);
+  const lowest = sc.rs.reduce((m, r) => r.after < m.after ? r : m, sc.rs[0]);
+  const debt = sc.rs.filter(r => r.after < 0).length;
+  const open = fs.filter(f => stateOf(f) === 'open');
+  const high = open.filter(f => CHECKS[f.check].sev === 'high');
+
+  /* banner */
+  let banner = '';
+  if (S.stale) banner = '<div class="banner info"><span class="mk info"></span><div><b>Studio changed after the last AI scan.</b> Income details was added at 10:04. Rules re-ran on save and found ' + fs.filter(f => f.id === 's6b').length + ' new issues; model findings may be out of date.<br><button class="btn tiny info" data-go="rescan">Rescan with AI</button></div></div>';
+  if (!S.baselineSet) banner += '<div class="banner serious"><span class="mk serious"></span><div><b>Anchor has no baseline trust for this project.</b> Ledger is using 0, the most cautious starting point, so the score is provisional. It will not guess a value for you.<br><button class="btn tiny" data-go="setbase">Set it in Anchor   2</button></div></div>';
+  $('banner').innerHTML = banner;
+
+  /* gauge + breakdown */
+  $('gauge').innerHTML = gauge(sc.total);
+  $('zone').innerHTML = '<span class="mk ' + z.key + '"></span>' + z.label;
+  $('zdesc').textContent = z.desc;
+  $('gflag').innerHTML = DRAFT && draftChanges().length ? '<span style="color:var(--info)">   </span> Preview    values not recorded'
+    : !S.baselineSet ? 'Provisional    no baseline in Anchor'
+    : sc.capped ? 'Capped at 79    ' + debt + ' step' + (debt === 1 ? '' : 's') + ' still in debt'
+    : S.stale ? '<span style="color:var(--info)">   </span> AI scan out of date'
+    : hasDecisions() || sc.dec ? 'Was ' + before.total + ' as built    ' + (sc.total >= before.total ? '+' : '') + (sc.total - before.total) + ' from decisions'
+    : 'As built    no decisions yet';
+
+  const bar = (label, sub, pct, val) => {
+    const zz = zoneOf(Math.round(pct * 100));
+    const col = {critical:'var(--critical)', serious:'var(--serious)', warning:'var(--warning)', good:'var(--good)'}[zz.key];
+    return '<div class="brow"><div class="l">' + label + '<small>' + sub + '</small></div>'
+      + '<div class="track"><i style="width:' + Math.max(2, pct * 100) + '%;background:' + col + '"></i></div>'
+      + '<div class="v">' + val + '</div></div>';
+  };
+  $('breakdown').innerHTML =
+      bar('Exchange', '60%    asks made from credit', sc.exch, sc.okAsks + '/' + sc.asks)
+    + bar('Decisions', '25%    findings resolved', sc.cov, sc.dec + '/' + sc.findings)
+    + bar('Measured', '15%    heavy asks with a signal', sc.meas, sc.measured + '/' + sc.heavy);
+  $('stats').innerHTML =
+      '<div><div class="n"><span class="mk ' + (lowest.after < 0 ? 'critical' : 'good') + '"></span>' + sign(lowest.after) + '</div><div class="l">Lowest point    ' + step(lowest.id).name + '</div></div>'
+    + '<div><div class="n"><span class="mk ' + (debt ? 'critical' : 'good') + '"></span>' + debt + ' of ' + sc.rs.length + '</div><div class="l">Steps in debt</div></div>'
+    + '<div><div class="n"><span class="mk ' + (high.length ? 'critical' : 'good') + '"></span>' + high.length + '</div><div class="l">High findings open</div></div>';
+
+  /* sources */
+  const readAI = S.aiScanned && !S.scanning;
+  $('srcs').innerHTML = RULE_SOURCES.map(n => '<span class="src rule">' + (n.startsWith('Studio') && S.stale ? '<span class="mk info"></span>' : '') + (n.startsWith('Studio') && S.extra ? 'Studio    10 screens' : n) + '</span>').join('')
+    + AI_SOURCES.map((n, i) => '<span class="src ' + (readAI || (S.scanning && i < S.scanStep) ? 'ai' : 'wait') + '">' + n + '</span>').join('');
+  $('srcName').textContent = S.scanning ? 'Scanning with AI' : (S.aiScanned ? 'Rules current    AI scan ' + S.scanAt + (S.stale ? '    out of date' : '') : 'Rules current');
+  $('srcNote').textContent = S.scanning ? 'Reading project sources. Maker-gated; draws on the AI allowance.'
+    : S.aiScanned ? 'Grey sources are read by rules on every save. Blue sources were read by the AI scan; its findings cite them.'
+    : 'Grey sources are read by rules on every save. Run the AI scan to read research and context notes too.';
+  $('scanBtn').textContent = S.scanning ? 'Scanning   ' : (S.aiScanned ? 'Rescan' : 'Scan with AI');
+  $('scanBtn').disabled = S.scanning;
+
+  /* next band */
+  let nb;
+  if (S.stale) nb = {k:'info', h:'Rules are current; the AI scan is not.', t:'Rescan to check the new step against research and context notes.', btn:'<button class="btn tiny info" data-go="rescan">Rescan with AI</button>'};
+  else if (!open.length) nb = {k:'good', h:'Every ask is earned.', t:fs.length + ' decisions recorded. ' + sc.measured + ' of ' + sc.heavy + ' heavy asks measured; their signals report back through Experience measurement after ship.'};
+  else if (z.key === 'critical') nb = {k:'critical', h:debt + ' steps are in debt.', t:'Start with the high findings. Moving an ask or giving first changes the curve most.', btn:high.length ? '<button class="btn tiny" data-filter="high">Show ' + high.length + ' high</button>' : ''};
+  else nb = {k:z.key, h:open.length + ' findings still open.', t:'Decisions so far moved the score from ' + before.total + ' to ' + sc.total + '.', btn:'<button class="btn tiny" data-filter="open">Show open</button>'};
+  if (!S.aiScanned && open.length) nb.t += ' Model checks (legibility, research fit) appear after an AI scan.';
+  $('nextband').innerHTML = '<div class="nextband ' + nb.k + '"><span class="mk ' + nb.k + '"></span><div><b>' + nb.h + '</b> ' + nb.t + (nb.btn ? '<br>' + nb.btn : '') + '</div></div>';
+
+  /* filters */
+  $('filters').innerHTML = FILTERS.map(f => {
+    const save = filter; filter = f.k;
+    const n = fs.filter(matches).length;
+    filter = save;
+    return '<button class="chip" data-filter="' + f.k + '" aria-pressed="' + (filter === f.k) + '"' + (n ? '' : ' disabled') + '>'
+      + (f.mk ? '<span class="mk ' + f.mk + '"></span>' : '') + f.label + '<b>' + n + '</b></button>';
+  }).join('');
+
+  const rows = fs.filter(matches).sort((a, b) => {
+    const so = x => (stateOf(x) === 'decided' ? 10 : 0) + ({high:0, medium:1, low:2})[CHECKS[x.check].sev];
+    return so(a) - so(b);
+  });
+  $('showing').innerHTML = '<span>' + (focus ? step(focus).name + '    ' : '') + rows.length + ' of ' + fs.length + ' findings</span>'
+    + (focus ? '<button data-clear="1">All steps</button>' : '');
+  $('cards').innerHTML = rows.length ? rows.map(card).join('')
+    : '<div class="empty">' + (focus && !step(focus).ask ? 'This step only gives. Nothing is asked of the user here.' : 'Nothing matches this filter.') + '</div>';
+
+  /* footer */
+  const heavyOk = sc.measured === sc.heavy;
+  $('kOpen').innerHTML = '<span class="mk ' + (open.length ? (high.length ? 'critical' : 'serious') : 'good') + '"></span>' + open.length;
+  $('kDecided').innerHTML = '<span class="mk good"></span>' + (fs.length - open.length);
+  $('kDebt').innerHTML = '<span class="mk ' + (debt ? 'critical' : 'good') + '"></span>' + debt;
+  $('kProxy').innerHTML = '<span class="mk ' + (heavyOk ? 'good' : 'warning') + '"></span>' + sc.measured + '/' + sc.heavy;
+  $('pSub').textContent = activeSteps().filter(s => s.ask).length + ' asks across ' + activeSteps().length + ' steps    ' + (S.aiScanned ? 'rules and AI scan' : 'rules only');
+  $('barNote').textContent = (S.aiScanned ? 'AI scan ' + S.scanAt : 'No AI scan yet') + '    baseline ' + (S.baselineSet ? 'from Anchor   2' : 'missing');
+
+  renderSteps(fs);
+  renderValues(sc);
+  chart();
+}
+
+/* ---------- flows ---------- */
+function read(){
+  S.mode = 'reading'; S.readStep = 0; render();
+  const t = setInterval(() => {
+    S.readStep++;
+    if (S.readStep > 3){ clearInterval(t); S.mode = 'live'; $('preset').value = 'red'; render(); return; }
+    render();
+  }, 420);
+}
+function scan(){
+  if (S.scanning) return;
+  S.scanning = true; S.scanStep = 0; render();
+  const t = setInterval(() => {
+    S.scanStep++;
+    if (S.scanStep > AI_SOURCES.length){
+      clearInterval(t);
+      S.scanning = false; S.aiScanned = true; S.stale = false; S.scanAt = now();
+      render(); return;
+    }
+    render();
+  }, 160);
+}
+
+/* ---------- presets ---------- */
+const KEEP = 'keep';
+const PICKS = {
+  progress:[
+    ['s3.seq','Move after Account home'], ['s7.seq','Move after Account home'], ['s5.def','Default off'],
+    ['s2.reason','Require a reason at the moment of asking'], ['s6.seq', KEEP, 'Terms have to precede the account. Tackling legibility instead.'],
+    ['s5.reason','Require a reason at the moment of asking'], ['s5.exit','Say where to change it later'],
+    ['s6.legib','Split consent per purpose'], ['s3.proxy','Grant / decline rate'], ['s7.proxy','Second session after a big ask']
+  ],
+  green:[
+    ['s2.reason','Require a reason at the moment of asking'],
+    ['s3.seq','Move after Account home'], ['s3.reason','Require a reason at the moment of asking'], ['s3.exit','Say where to change it later'],
+    ['s3.proxy','Grant / decline rate'], ['s3.fit','Move after Account home'],
+    ['s4.seq','Give first: show value before asking'],
+    ['s5.seq','Move after Account home'], ['s5.reason','Require a reason at the moment of asking'], ['s5.exit','Say where to change it later'], ['s5.def','Default off'],
+    ['s6.seq', KEEP, 'Terms have to precede the account. Resolved by splitting consent per purpose.'],
+    ['s6.reason','Require a reason at the moment of asking'], ['s6.legib','Split consent per purpose'], ['s6.proxy','Second session after a big ask'],
+    ['s7.seq','Move after Account home'], ['s7.proxy','Second session after a big ask'], ['s7.fit','Move after Account home'],
+    ['s9.seq','Fix upstream, no change here']
+  ]
+};
+function applyPicks(list, at){
+  const fs = findings();
+  list.forEach(([key, label, why]) => {
+    const f = fs.find(x => x.key === key);
+    if (!f) return;
+    if (label === KEEP){ VERDICT[key] = {state:'decided', option:'Kept as built', effect:null, sends:null, reason:why, at}; return; }
+    const o = f.options.find(x => x.label === label) || (f.cleared ? f.options[0] : null);
+    if (o) VERDICT[key] = {state:'decided', option:o.label, effect:o.effect, sends:o.sends, reason:null, at};
+  });
+}
+
+function preset(name){
+  VERDICT = {}; filter = 'all'; focus = null; S.note = '';
+  VAL = {base:2, give:{}, weight:{}}; VLOG = []; DRAFT = null;
+  Object.assign(S, {flow:true, aiScanned:false, scanning:false, scanAt:null, baselineSet:true, extra:false, stale:false, mode:'live'});
+  switch (name){
+    case 'empty':   S.flow = false; S.mode = 'empty'; break;
+    case 'ready':   S.mode = 'ready'; break;
+    case 'reading': read(); return;
+    case 'red':     break;
+    case 'scanned': S.aiScanned = true; S.scanAt = '09:12'; break;
+    case 'progress':S.aiScanned = true; S.scanAt = '09:12'; applyPicks(PICKS.progress, '09:40'); break;
+    case 'green':   S.aiScanned = true; S.scanAt = '09:12'; applyPicks(PICKS.green, '09:58'); break;
+    case 'stale':   S.aiScanned = true; S.scanAt = '09:12'; applyPicks(PICKS.green, '09:58'); S.extra = true; S.stale = true; break;
+    case 'nobase':  S.baselineSet = false; break;
+  }
+  render();
+}
+
+/* ---------- interactions ---------- */
+document.addEventListener('change', e => {
+  if (e.target.id === 'preset') preset(e.target.value);
+});
+
+document.addEventListener('click', e => {
+  const go = e.target.closest('[data-go]');
+  if (go){
+    switch (go.dataset.go){
+      case 'sample': S.flow = true; S.mode = 'ready'; $('preset').value = 'ready'; break;
+      case 'openfunnel': S.note = 'Opens Funnel map in Plana. In this prototype, use the sample flow.'; break;
+      case 'read': read(); return;
+      case 'rescan': scan(); return;
+      case 'setbase': S.baselineSet = true; break;
+    }
+    render(); return;
+  }
+  if (e.target.id === 'scanBtn'){ scan(); return; }
+  if (e.target.id === 'editVals'){
+    DRAFT = {base:VAL.base, give:Object.assign({}, VAL.give), weight:Object.assign({}, VAL.weight), baseSet:S.baselineSet, why:''};
+    render(); return;
+  }
+  const vb = e.target.closest('[data-val]');
+  if (vb){
+    const d = +vb.dataset.d, id = vb.dataset.id, kind = vb.dataset.val;
+    if (kind === 'base'){ DRAFT.base = Math.max(0, Math.min(5, baseline() + d)); DRAFT.baseSet = true; }
+    else if (kind === 'give'){ const st = step(id); DRAFT.give[id] = Math.max(0, Math.min(6, giveOf(st) + d)); }
+    else { const st = step(id); DRAFT.weight[id] = Math.max(1, Math.min(5, weightOf(st) + d)); }
+    render(); return;
+  }
+  const va = e.target.closest('[data-vact]');
+  if (va){
+    if (va.dataset.vact === 'discard'){ DRAFT = null; render(); return; }
+    const box = $('valWhy'); const why = box ? box.value.trim() : '';
+    if (!why){ if (box) box.focus(); return; }
+    const changes = draftChanges();
+    VLOG.unshift({id:'DEC-' + (201 + VLOG.length), changes, why, who:'Hamza', at:now()});
+    if (DRAFT.baseSet) S.baselineSet = true;
+    VAL = {base:DRAFT.base, give:DRAFT.give, weight:DRAFT.weight};
+    DRAFT = null; render(); return;
+  }
+
+  const st = e.target.closest('[data-step]');
+  if (st && e.target.closest('[data-noselect]')) return;
+  if (st){ focus = focus === st.dataset.step ? null : st.dataset.step; filter = 'all'; render(); return; }
+  if (e.target.closest('[data-clear]')){ focus = null; render(); return; }
+
+  const fl = e.target.closest('[data-filter]');
+  if (fl){ filter = fl.dataset.filter; render(); return; }
+
+  const a = e.target.closest('[data-act]');
+  if (!a) return;
+  const key = a.dataset.key;
+  const f = findings().find(x => x.key === key);
+  const v = VERDICT[key] || (VERDICT[key] = {});
+  switch (a.dataset.act){
+    case 'pick': {
+      const o = f.options[+a.dataset.i];
+      VERDICT[key] = {state:'decided', option:o.label, effect:o.effect, sends:o.sends, reason:null, at:now()};
+      break;
+    }
+    case 'ask': v.asking = true; break;
+    case 'cancel': v.asking = false; v.draft = ''; break;
+    case 'keep': {
+      const box = document.querySelector('[data-why="' + key + '"]');
+      const why = box ? box.value.trim() : '';
+      if (!why){ if (box) box.focus(); return; }
+      VERDICT[key] = {state:'decided', option:'Kept as built', effect:null, sends:null, reason:why, at:now()};
+      break;
+    }
+    case 'reopen': delete VERDICT[key]; break;
+  }
+  render();
+});
+
+document.addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('[data-step]')){ e.preventDefault(); e.target.click(); }
+});
+document.addEventListener('input', e => {
+  if (e.target.id === 'valWhy' && DRAFT){ DRAFT.why = e.target.value; return; }
+  const w = e.target.closest('[data-why]');
+  if (w) (VERDICT[w.dataset.why] || (VERDICT[w.dataset.why] = {})).draft = w.value;
+});
+
+/* chart hover */
+$('chartWrap').addEventListener('mousemove', e => {
+  const hit = e.target.closest('[data-hit]');
+  const tip = $('tip');
+  if (!hit){ tip.style.opacity = 0; return; }
+  const r = chart.shown[+hit.dataset.hit], s = step(r.id);
+  tip.innerHTML = '<b>' + s.name + '</b><br>'
+    + (r.give ? 'Gets +' + r.give + '    ' : '') + (r.cost ? 'Asks    ' + r.cost + '    ' : 'No ask    ')
+    + 'Balance ' + sign(r.after) + (r.after < 0 ? ' (debt)' : ' (credit)');
+  const box = $('chartWrap').getBoundingClientRect();
+  const px = e.clientX - box.left, py = e.clientY - box.top;
+  tip.style.left = Math.min(px + 12, box.width - 230) + 'px';
+  tip.style.top = Math.max(py - 50, 4) + 'px';
+  tip.style.opacity = 1;
+});
+$('chartWrap').addEventListener('mouseleave', () => $('tip').style.opacity = 0);
+
+/* hover a card, highlight its step */
+document.addEventListener('mouseover', e => {
+  const c = e.target.closest('[data-card]');
+  document.querySelectorAll('.step').forEach(n => n.style.background = '');
+  if (c){
+    const n = document.querySelector('[data-step="' + c.dataset.card + '"]');
+    if (n) n.style.background = 'var(--panel)';
+  }
+});
+
+preset('empty');
+</script>
+</body>
+</html>
+Folder info
+2 items
+96 KB
+October 20, 2026
+Did you know?
+You can view over 200 file formats online. Click any file in this folder to view it.
+
